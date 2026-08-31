@@ -1,64 +1,121 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import {
+  WagmiProvider,
+  createConfig,
+  http,
+  useAccount,
+  useConnect,
+  useDisconnect,
+  useChainId,
+} from "wagmi";
+import { injected } from "wagmi/connectors";
+import { mainnet } from "wagmi/chains";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-const NOVA_PER_USD = 10000;
+const config = createConfig({
+  chains: [mainnet],
+  connectors: [injected()],
+  transports: {
+    [mainnet.id]: http(),
+  },
+});
 
-const TELEGRAM_URL = "https://t.me/NOVAFOX18";
-const X_URL = "https://x.com/NOVAverse12";
+const queryClient = new QueryClient();
 
-const LAUNCH_DATE = new Date(
-  Date.now() + 40 * 24 * 60 * 60 * 1000
-).getTime();
+const TELEGRAM = "https://t.me/NOVAFOX18";
+const TWITTER = "https://x.com/NOVAverse12";
 
-const faqs = [
-  {
-    q: "What is NOVA?",
-    a: "NOVA is a community-focused space-themed meme token concept.",
-  },
-  {
-    q: "When will NOVA launch?",
-    a: "The current website countdown is set to 40 days as a demo launch timer.",
-  },
-  {
-    q: "How many NOVA do I get for $1?",
-    a: "The current demo rate is 1 USD = 10,000 NOVA.",
-  },
-  {
-    q: "Can I buy NOVA now?",
-    a: "The current purchase and swap system is a demonstration only. No real transaction is processed.",
-  },
-  {
-    q: "Is the wallet connection real?",
-    a: "The wallet connection shown on this demo is simulated and does not request access to funds.",
-  },
-  {
-    q: "Where can I follow NOVA?",
-    a: "Follow NOVA on X and join the Telegram community using the official links on this page.",
-  },
-];
+function shortenAddress(address?: string) {
+  if (!address) return "";
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+function WalletButton() {
+  const { address, isConnected } = useAccount();
+  const { connect, isPending } = useConnect();
+  const { disconnect } = useDisconnect();
+  const chainId = useChainId();
+
+  const [message, setMessage] = useState("");
+
+  const handleWallet = async () => {
+    if (isConnected) {
+      disconnect();
+      setMessage("Wallet disconnected.");
+      return;
+    }
+
+    try {
+      setMessage("");
+
+      connect(
+        { connector: injected() },
+        {
+          onSuccess: () => {
+            setMessage("Wallet connected successfully ✓");
+          },
+          onError: (error) => {
+            setMessage(error.message || "Wallet connection failed.");
+          },
+        }
+      );
+    } catch {
+      setMessage("Could not connect wallet.");
+    }
+  };
+
+  return (
+    <div className="walletArea">
+      <button className="walletBtn" onClick={handleWallet}>
+        {isPending
+          ? "Connecting..."
+          : isConnected
+            ? `${shortenAddress(address)} ✓`
+            : "Connect Wallet"}
+      </button>
+
+      {isConnected && (
+        <div className="walletInfo">
+          <div>
+            <span>Wallet</span>
+            <strong>{shortenAddress(address)}</strong>
+          </div>
+
+          <div>
+            <span>Network</span>
+            <strong>
+              {chainId === mainnet.id ? "Ethereum Mainnet" : `Chain ${chainId}`}
+            </strong>
+          </div>
+        </div>
+      )}
+
+      {message && <div className="walletMessage">{message}</div>}
+    </div>
+  );
+}
 
 function Logo() {
   return (
     <div className="logo">
-      <div className="logoIcon">✦</div>
+      <div className="logoMark">✦</div>
       <span>NOVA</span>
     </div>
   );
 }
 
 function Stars() {
-  const stars = Array.from({ length: 70 });
-
   return (
     <div className="stars">
-      {stars.map((_, i) => (
+      {Array.from({ length: 70 }).map((_, i) => (
         <span
           key={i}
           style={{
             left: `${(i * 37) % 100}%`,
             top: `${(i * 61) % 100}%`,
-            animationDelay: `${(i % 7) * 0.5}s`,
+            animationDelay: `${(i % 8) * 0.4}s`,
           }}
         />
       ))}
@@ -66,114 +123,63 @@ function Stars() {
   );
 }
 
-export default function Home() {
-  const [wallet, setWallet] = useState("");
-  const [walletOpen, setWalletOpen] = useState(false);
-  const [usd, setUsd] = useState("1");
-  const [nova, setNova] = useState("10000");
-  const [swapStatus, setSwapStatus] = useState("");
-  const [email, setEmail] = useState("");
-  const [emailStatus, setEmailStatus] = useState("");
+function NovaSite() {
+  const [menuOpen, setMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [email, setEmail] = useState("");
+  const [subscribed, setSubscribed] = useState(false);
+  const [notify, setNotify] = useState("");
 
-  const [time, setTime] = useState({
-    days: 40,
-    hours: 0,
-    minutes: 0,
-    seconds: 0,
-  });
+  const faqs = [
+    {
+      q: "When will NOVA launch?",
+      a: "The official launch date will be announced through NOVA's official channels.",
+    },
+    {
+      q: "How can I buy NOVA?",
+      a: "NOVA purchase functionality will only be enabled after the official launch details are finalized.",
+    },
+    {
+      q: "Which wallet can I use?",
+      a: "Compatible browser wallets can connect to the website through the standard wallet connection interface.",
+    },
+    {
+      q: "Will there be a presale?",
+      a: "Official presale information will be published through NOVA's verified channels.",
+    },
+    {
+      q: "Is NOVA audited?",
+      a: "Audit information will be published if and when an independent audit is completed.",
+    },
+    {
+      q: "Is this a long-term project?",
+      a: "NOVA is being developed as a community-focused internet brand.",
+    },
+  ];
 
-  useEffect(() => {
-    const updateTimer = () => {
-      const diff = Math.max(0, LAUNCH_DATE - Date.now());
-
-      setTime({
-        days: Math.floor(diff / 86400000),
-        hours: Math.floor((diff / 3600000) % 24),
-        minutes: Math.floor((diff / 60000) % 60),
-        seconds: Math.floor((diff / 1000) % 60),
-      });
-    };
-
-    updateTimer();
-
-    const timer = setInterval(updateTimer, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  const calculateNova = (value: string) => {
-    setUsd(value);
-
-    const amount = Number(value);
-
-    if (!Number.isFinite(amount) || amount < 0) {
-      setNova("0");
-      return;
-    }
-
-    setNova((amount * NOVA_PER_USD).toLocaleString("en-US"));
-  };
-
-  const calculateUsd = (value: string) => {
-    setNova(value);
-
-    const amount = Number(value.replace(/,/g, ""));
-
-    if (!Number.isFinite(amount) || amount < 0) {
-      setUsd("0");
-      return;
-    }
-
-    setUsd((amount / NOVA_PER_USD).toString());
-  };
-
-  const connectWallet = () => {
-    if (wallet) {
-      setWallet("");
-      setWalletOpen(false);
-      return;
-    }
-
-    setWalletOpen(true);
-  };
-
-  const selectWallet = (name: string) => {
-    setWallet(`${name} 0x7A...91F2`);
-    setWalletOpen(false);
-  };
-
-  const demoSwap = () => {
-    if (!usd || Number(usd) <= 0) {
-      setSwapStatus("Enter an amount first.");
-      return;
-    }
-
-    setSwapStatus(
-      `Demo swap ready: $${usd} → ${nova} NOVA`
-    );
+  const showNotify = (text: string) => {
+    setNotify(text);
+    setTimeout(() => setNotify(""), 3000);
   };
 
   const subscribe = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email || !email.includes("@")) {
-      setEmailStatus("Please enter a valid email.");
+    if (!email.includes("@")) {
+      showNotify("Please enter a valid email.");
       return;
     }
 
-    setEmailStatus("🚀 You're on the NOVA notification list!");
+    setSubscribed(true);
     setEmail("");
+    showNotify("You're on the NOVA notification list 🚀");
   };
 
   return (
     <main>
       <Stars />
 
-      <div className="glow glow1" />
-      <div className="glow glow2" />
-
-      {/* NAVBAR */}
+      {notify && <div className="toast">{notify}</div>}
 
       <header className="navbarWrap">
         <nav className="navbar">
@@ -181,106 +187,67 @@ export default function Home() {
             <Logo />
           </a>
 
-          <div className="navLinks">
-            <a href="#home">Home</a>
-            <a href="#about">About</a>
-            <a href="#tokenomics">Tokenomics</a>
-            <a href="#swap">Swap</a>
-            <a href="#roadmap">Roadmap</a>
-            <a href="#faq">FAQ</a>
+          <div className={`navLinks ${menuOpen ? "open" : ""}`}>
+            <a href="#home" onClick={() => setMenuOpen(false)}>
+              Home
+            </a>
+            <a href="#about" onClick={() => setMenuOpen(false)}>
+              About
+            </a>
+            <a href="#tokenomics" onClick={() => setMenuOpen(false)}>
+              Tokenomics
+            </a>
+            <a href="#roadmap" onClick={() => setMenuOpen(false)}>
+              Roadmap
+            </a>
+            <a href="#faq" onClick={() => setMenuOpen(false)}>
+              FAQ
+            </a>
+            <a href="#community" onClick={() => setMenuOpen(false)}>
+              Community
+            </a>
           </div>
 
-          <div className="navActions">
+          <div className="navRight">
             <a
-              href={X_URL}
+              className="social"
+              href={TWITTER}
               target="_blank"
               rel="noreferrer"
-              className="social"
             >
               𝕏
             </a>
 
             <a
-              href={TELEGRAM_URL}
+              className="social"
+              href={TELEGRAM}
               target="_blank"
               rel="noreferrer"
-              className="social"
             >
               ✈
             </a>
 
-            <button className="walletButton" onClick={connectWallet}>
-              {wallet ? `${wallet} ✓` : "Connect Wallet"}
+            <WalletButton />
+
+            <button
+              className="hamburger"
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              ☰
             </button>
           </div>
         </nav>
       </header>
 
-      {/* WALLET MODAL */}
-
-      {walletOpen && (
-        <div className="modalOverlay" onClick={() => setWalletOpen(false)}>
-          <div
-            className="walletModal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="closeModal"
-              onClick={() => setWalletOpen(false)}
-            >
-              ×
-            </button>
-
-            <div className="modalIcon">🔐</div>
-
-            <h3>Connect Wallet</h3>
-
-            <p>
-              Choose a wallet to continue with the NOVA demo.
-            </p>
-
-            <button
-              className="walletOption"
-              onClick={() => selectWallet("MetaMask")}
-            >
-              🦊 MetaMask
-              <span>→</span>
-            </button>
-
-            <button
-              className="walletOption"
-              onClick={() => selectWallet("Phantom")}
-            >
-              👻 Phantom
-              <span>→</span>
-            </button>
-
-            <button
-              className="walletOption"
-              onClick={() => selectWallet("WalletConnect")}
-            >
-              🔗 WalletConnect
-              <span>→</span>
-            </button>
-
-            <small>
-              Demo connection only — no funds are requested.
-            </small>
-          </div>
-        </div>
-      )}
-
-      {/* HERO */}
-
       <section className="hero section" id="home">
-        <div className="heroContent">
+        <div className="heroText">
           <div className="badge">
             <span />
-            🚀 LAUNCHING IN 40 DAYS
+            🚀 LAUNCHING SOON
           </div>
 
           <h1>
-            <span>$</span>NOVA
+            $N<span>O</span>VA
           </h1>
 
           <h2>
@@ -293,59 +260,51 @@ export default function Home() {
             Built for the community.
           </p>
 
-          <div className="timer">
+          <div className="countdown">
             <div>
-              <strong>{String(time.days).padStart(2, "0")}</strong>
+              <strong>40</strong>
               <small>DAYS</small>
             </div>
-
             <div>
-              <strong>{String(time.hours).padStart(2, "0")}</strong>
+              <strong>00</strong>
               <small>HOURS</small>
             </div>
-
             <div>
-              <strong>{String(time.minutes).padStart(2, "0")}</strong>
+              <strong>00</strong>
               <small>MINUTES</small>
             </div>
-
             <div>
-              <strong>{String(time.seconds).padStart(2, "0")}</strong>
+              <strong>00</strong>
               <small>SECONDS</small>
             </div>
           </div>
 
-          <div className="heroButtons">
-            <a href="#swap" className="primaryButton">
-              🚀 GET NOVA
-            </a>
+          <div className="buttons">
+            <button
+              className="primary"
+              onClick={() =>
+                showNotify("NOVA launch is not live yet 🚀")
+              }
+            >
+              🚀 BUY NOVA
+            </button>
 
             <a
-              href={X_URL}
+              className="secondary"
+              href={TWITTER}
               target="_blank"
               rel="noreferrer"
-              className="secondaryButton"
             >
               𝕏 FOLLOW ON X
             </a>
           </div>
 
-          <div className="heroSocial">
-            <span>Join the crew:</span>
-
-            <a
-              href={X_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
+          <div className="communityLinks">
+            <span>Join the Community:</span>
+            <a href={TWITTER} target="_blank" rel="noreferrer">
               𝕏
             </a>
-
-            <a
-              href={TELEGRAM_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
+            <a href={TELEGRAM} target="_blank" rel="noreferrer">
               ✈
             </a>
           </div>
@@ -357,190 +316,61 @@ export default function Home() {
           <div className="orbit orbit1" />
           <div className="orbit orbit2" />
 
-          <div className="moon" />
-
           <div className="fox">
             🦊
           </div>
 
-          <div className="astronaut">
-            👨‍🚀
-          </div>
-
-          <div className="rocket">
-            🚀
-          </div>
+          <div className="rocket">🚀</div>
 
           <div className="quote">
-            ✦ We're not going to the moon...
+            ★ We're not going to the moon...
             <b>We're building a new orbit.</b>
           </div>
         </div>
       </section>
 
-      {/* TOKEN OVERVIEW */}
-
       <section className="section" id="about">
-        <div className="sectionHeading">
-          <span>THE NOVA NETWORK</span>
-          <h2>
-            Built for the <b>community.</b>
-          </h2>
-
-          <p>
-            NOVA is a space-themed internet culture project
-            focused on community, creativity and transparency.
-          </p>
-        </div>
-
-        <div className="stats">
-          <div className="card">
-            <span>◈</span>
-            <small>TOTAL SUPPLY</small>
-            <strong>1,000,000,000</strong>
-            <em>NOVA</em>
-          </div>
-
-          <div className="card">
-            <span>🚀</span>
-            <small>STATUS</small>
-            <strong>COMING SOON</strong>
-            <em>Pre-Launch</em>
-          </div>
-
-          <div className="card">
-            <span>⌁</span>
-            <small>NETWORK</small>
-            <strong>TBA</strong>
-            <em>Official chain</em>
-          </div>
-
-          <div className="card">
-            <span>💎</span>
-            <small>DEMO RATE</small>
-            <strong>10,000</strong>
-            <em>NOVA / $1</em>
-          </div>
-        </div>
-      </section>
-
-      {/* SWAP */}
-
-      <section className="section swapSection" id="swap">
-        <div className="sectionHeading center">
-          <span>DEMO EXCHANGE</span>
-
-          <h2>
-            Get <b>$NOVA</b>
-          </h2>
-
-          <p>
-            Preview the NOVA swap experience before launch.
-          </p>
-        </div>
-
-        <div className="swapCard">
-          <div className="swapHeader">
-            <span>Swap</span>
-            <span className="demoTag">DEMO</span>
-          </div>
-
-          <div className="inputBox">
-            <div>
-              <span>YOU PAY</span>
-
-              <input
-                value={usd}
-                onChange={(e) => calculateNova(e.target.value)}
-                inputMode="decimal"
-                placeholder="0"
-              />
-            </div>
-
-            <strong>USD</strong>
-          </div>
-
-          <div className="swapArrow">↓</div>
-
-          <div className="inputBox">
-            <div>
-              <span>YOU RECEIVE</span>
-
-              <input
-                value={nova}
-                onChange={(e) => calculateUsd(e.target.value)}
-                inputMode="numeric"
-                placeholder="0"
-              />
-            </div>
-
-            <strong>$NOVA</strong>
-          </div>
-
-          <div className="rate">
-            <span>Current demo rate</span>
-            <strong>1 USD = 10,000 NOVA</strong>
-          </div>
-
-          <button className="swapButton" onClick={demoSwap}>
-            🚀 PREVIEW SWAP
-          </button>
-
-          {swapStatus && (
-            <div className="status">
-              {swapStatus}
-            </div>
-          )}
-
-          <small className="warning">
-            Demo only. No real transaction or payment is processed.
-          </small>
-        </div>
-      </section>
-
-      {/* ABOUT */}
-
-      <section className="section about">
-        <div className="aboutVisual">
-          <div className="aboutPlanet" />
-          <div className="bigFox">🦊</div>
-        </div>
-
-        <div className="aboutText">
+        <div className="title">
           <span>WHO IS NOVA?</span>
-
           <h2>
-            Not just a token.
-            <br />
-            <b>A movement.</b>
+            About <b>NOVA</b>
           </h2>
+          <p>Not just a token. A movement.</p>
+        </div>
 
-          <p>
-            NOVA combines internet culture, meme energy and
-            futuristic space aesthetics into one community-driven
-            identity.
-          </p>
+        <div className="aboutGrid">
+          <div className="aboutCard">
+            <div className="bigFox">🦊</div>
+          </div>
 
-          <div className="pills">
-            <span>✦ Community First</span>
-            <span>🚀 Fair Launch</span>
-            <span>🌌 Space Culture</span>
-            <span>∞ Internet Energy</span>
+          <div className="aboutContent">
+            <h3>Born on the internet.</h3>
+
+            <p>
+              NOVA is a community-focused meme token concept inspired by
+              internet culture, space and the unstoppable energy of crypto.
+            </p>
+
+            <p>
+              The mission is simple: build a recognizable brand, create a fun
+              community and develop transparently.
+            </p>
+
+            <div className="pills">
+              <span>✦ Community First</span>
+              <span>⌁ Fair Launch</span>
+              <span>🚀 No Fake Promises</span>
+              <span>∞ 100% Vibes</span>
+            </div>
           </div>
         </div>
       </section>
-
-      {/* TOKENOMICS */}
 
       <section className="section" id="tokenomics">
-        <div className="sectionHeading center">
+        <div className="title">
           <span>THE NUMBERS</span>
-
           <h2>Tokenomics</h2>
-
-          <p>
-            Preliminary concept allocation.
-          </p>
+          <p>Preliminary concept allocation.</p>
         </div>
 
         <div className="tokenGrid">
@@ -554,117 +384,99 @@ export default function Home() {
           </div>
 
           <div className="allocation">
-            <div className="allocationItem">
-              <div>
-                <i className="purpleDot" />
-                Community
-              </div>
-
-              <strong>70%</strong>
-            </div>
-
-            <div className="bar">
-              <span style={{ width: "70%" }} />
-            </div>
-
-            <div className="allocationItem">
-              <div>
-                <i className="blueDot" />
-                Liquidity
-              </div>
-
-              <strong>20%</strong>
-            </div>
-
-            <div className="bar">
-              <span style={{ width: "20%" }} />
-            </div>
-
-            <div className="allocationItem">
-              <div>
-                <i className="orangeDot" />
-                Marketing
-              </div>
-
-              <strong>10%</strong>
-            </div>
-
-            <div className="bar">
-              <span style={{ width: "10%" }} />
-            </div>
+            <Allocation name="Community" value="70%" width="70%" />
+            <Allocation name="Liquidity" value="20%" width="20%" />
+            <Allocation name="Marketing" value="10%" width="10%" />
 
             <p>
-              These allocations are preliminary and should be
-              finalized before any public token launch.
+              These allocations are preliminary and should be finalized before
+              any public token launch.
             </p>
           </div>
         </div>
       </section>
 
-      {/* ROADMAP */}
-
       <section className="section" id="roadmap">
-        <div className="sectionHeading center">
+        <div className="title">
           <span>MISSION CONTROL</span>
-
           <h2>Roadmap</h2>
-
           <p>From ignition to supernova.</p>
         </div>
 
         <div className="roadmap">
-          <div className="roadCard">
-            <span>PHASE 01</span>
-            <h3>IGNITION</h3>
+          <Road
+            phase="PHASE 01"
+            title="IGNITION"
+            items={[
+              "Website Launch",
+              "Community Building",
+              "X Launch",
+              "Meme Factory",
+            ]}
+          />
 
-            <ul>
-              <li>✓ Website launch</li>
-              <li>✓ X community</li>
-              <li>✓ Telegram community</li>
-              <li>✓ Meme campaign</li>
-            </ul>
-          </div>
+          <div className="arrow">»</div>
 
-          <div className="roadArrow">→</div>
+          <Road
+            phase="PHASE 02"
+            title="ORBIT"
+            items={[
+              "Token Launch",
+              "DEX Listing",
+              "Community Events",
+              "Creator Campaigns",
+            ]}
+          />
 
-          <div className="roadCard blue">
-            <span>PHASE 02</span>
-            <h3>ORBIT</h3>
+          <div className="arrow">»</div>
 
-            <ul>
-              <li>✓ Token launch</li>
-              <li>✓ DEX listing</li>
-              <li>✓ Community events</li>
-              <li>✓ Creator campaigns</li>
-            </ul>
-          </div>
-
-          <div className="roadArrow">→</div>
-
-          <div className="roadCard orange">
-            <span>PHASE 03</span>
-            <h3>SUPERNOVA</h3>
-
-            <ul>
-              <li>✓ Partnerships</li>
-              <li>✓ Ecosystem expansion</li>
-              <li>✓ Community growth</li>
-              <li>✓ Bigger ideas</li>
-            </ul>
-          </div>
+          <Road
+            phase="PHASE 03"
+            title="SUPERNOVA"
+            items={[
+              "Partnerships",
+              "Ecosystem Expansion",
+              "Community Growth",
+              "Bigger Ideas",
+            ]}
+          />
         </div>
       </section>
 
-      {/* COMMUNITY */}
+      <section className="section" id="faq">
+        <div className="title">
+          <span>QUESTIONS?</span>
+          <h2>FAQ</h2>
+          <p>Your questions, answered.</p>
+        </div>
 
-      <section className="section">
-        <div className="community">
+        <div className="faq">
+          {faqs.map((item, index) => (
+            <div className="faqItem" key={item.q}>
+              <button
+                onClick={() =>
+                  setOpenFaq(openFaq === index ? null : index)
+                }
+              >
+                {item.q}
+                <b>{openFaq === index ? "−" : "+"}</b>
+              </button>
+
+              {openFaq === index && (
+                <p>{item.a}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="section community" id="community">
+        <div className="communityBox">
           <div>
             <span>JOIN THE CREW</span>
 
             <h2>
-              The future is
-              <b> community.</b>
+              The future is <b>community.</b>
             </h2>
 
             <p>
@@ -673,7 +485,7 @@ export default function Home() {
 
             <div className="communityButtons">
               <a
-                href={X_URL}
+                href={TWITTER}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -681,7 +493,7 @@ export default function Home() {
               </a>
 
               <a
-                href={TELEGRAM_URL}
+                href={TELEGRAM}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -694,46 +506,18 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ */}
-
-      <section className="section" id="faq">
-        <div className="sectionHeading center">
-          <span>QUESTIONS?</span>
-          <h2>FAQ</h2>
+      <section className="section notifySection">
+        <div>
+          <span>STAY IN ORBIT</span>
+          <h2>Don&apos;t miss NOVA.</h2>
+          <p>Stay connected for launch updates.</p>
         </div>
 
-        <div className="faq">
-          {faqs.map((faq, index) => (
-            <div className="faqItem" key={faq.q}>
-              <button
-                onClick={() =>
-                  setOpenFaq(openFaq === index ? null : index)
-                }
-              >
-                <span>{faq.q}</span>
-                <b>{openFaq === index ? "−" : "+"}</b>
-              </button>
-
-              {openFaq === index && (
-                <p>{faq.a}</p>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* NOTIFY */}
-
-      <section className="section">
-        <div className="notify">
-          <div>
-            <span>STAY IN ORBIT</span>
-
-            <h2>Don't miss the launch.</h2>
-
-            <p>Stay connected with NOVA.</p>
+        {subscribed ? (
+          <div className="subscribed">
+            🚀 You&apos;re on the list!
           </div>
-
+        ) : (
           <form onSubmit={subscribe}>
             <input
               type="email"
@@ -742,79 +526,37 @@ export default function Home() {
               onChange={(e) => setEmail(e.target.value)}
             />
 
-            <button type="submit">
-              Notify Me
-            </button>
+            <button>Notify Me</button>
           </form>
-        </div>
-
-        {emailStatus && (
-          <div className="emailStatus">
-            {emailStatus}
-          </div>
         )}
       </section>
 
-      {/* FOOTER */}
-
       <footer>
-        <div className="footerInner">
-          <div>
-            <Logo />
+        <Logo />
 
-            <p>
-              Born on the internet.
-              <br />
-              Built for the community.
-            </p>
-          </div>
+        <p>Born on the internet. Built for the community.</p>
 
-          <div className="footerLinks">
-            <a
-              href={X_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
-              𝕏
-            </a>
+        <div>
+          <a href={TWITTER} target="_blank" rel="noreferrer">
+            𝕏
+          </a>
 
-            <a
-              href={TELEGRAM_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
-              ✈
-            </a>
-          </div>
-
-          <div className="copyright">
-            © 2026 NOVA
-            <br />
-            Built for dreamers. 🚀
-          </div>
+          <a href={TELEGRAM} target="_blank" rel="noreferrer">
+            ✈
+          </a>
         </div>
+
+        <small>© 2026 NOVA. Concept website.</small>
       </footer>
 
       <style jsx global>{`
         * {
           box-sizing: border-box;
-          scroll-behavior: smooth;
-        }
-
-        :root {
-          --bg: #020611;
-          --card: rgba(7, 16, 38, 0.82);
-          --purple: #9b4dff;
-          --blue: #29caff;
-          --pink: #d65cff;
-          --orange: #ff9d3d;
-          --text: #f8f9ff;
-          --muted: #9ca8c3;
-          --line: rgba(110, 135, 255, 0.25);
         }
 
         html {
-          background: var(--bg);
+          scroll-behavior: smooth;
+          background: #020611;
         }
 
         body {
@@ -822,20 +564,12 @@ export default function Home() {
           background:
             radial-gradient(
               circle at 50% -10%,
-              rgba(111, 43, 255, 0.23),
+              rgba(100, 40, 255, 0.25),
               transparent 35%
             ),
-            radial-gradient(
-              circle at 100% 50%,
-              rgba(0, 190, 255, 0.08),
-              transparent 30%
-            ),
-            var(--bg);
-          color: var(--text);
-          font-family:
-            Arial,
-            Helvetica,
-            sans-serif;
+            #020611;
+          color: white;
+          font-family: Arial, sans-serif;
           overflow-x: hidden;
         }
 
@@ -849,23 +583,19 @@ export default function Home() {
           font: inherit;
         }
 
-        button {
-          cursor: pointer;
-        }
-
         .stars {
           position: fixed;
           inset: 0;
+          z-index: -1;
           pointer-events: none;
-          z-index: -5;
         }
 
         .stars span {
           position: absolute;
           width: 2px;
           height: 2px;
-          border-radius: 50%;
           background: white;
+          border-radius: 50%;
           opacity: 0.5;
           animation: twinkle 3s infinite;
         }
@@ -873,30 +603,8 @@ export default function Home() {
         @keyframes twinkle {
           50% {
             opacity: 1;
-            transform: scale(1.8);
+            transform: scale(1.7);
           }
-        }
-
-        .glow {
-          position: fixed;
-          width: 450px;
-          height: 450px;
-          border-radius: 50%;
-          filter: blur(120px);
-          pointer-events: none;
-          z-index: -4;
-        }
-
-        .glow1 {
-          left: -300px;
-          top: 20%;
-          background: rgba(133, 48, 255, 0.14);
-        }
-
-        .glow2 {
-          right: -300px;
-          top: 60%;
-          background: rgba(0, 191, 255, 0.1);
         }
 
         .navbarWrap {
@@ -904,77 +612,59 @@ export default function Home() {
           top: 18px;
           left: 0;
           right: 0;
-          padding: 0 20px;
           z-index: 100;
+          padding: 0 20px;
         }
 
         .navbar {
-          width: min(1180px, 100%);
+          max-width: 1180px;
+          min-height: 65px;
           margin: auto;
-          min-height: 68px;
           padding: 10px 15px;
           display: flex;
           align-items: center;
           gap: 25px;
-          border: 1px solid var(--line);
+          border: 1px solid rgba(100, 120, 255, 0.3);
           border-radius: 20px;
-          background: rgba(3, 9, 25, 0.82);
-          backdrop-filter: blur(22px);
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+          background: rgba(3, 9, 25, 0.85);
+          backdrop-filter: blur(20px);
         }
 
         .logo {
           display: flex;
           align-items: center;
           gap: 10px;
-          font-size: 22px;
+          font-size: 23px;
           font-weight: 900;
-          letter-spacing: 1px;
         }
 
-        .logoIcon {
+        .logoMark {
           width: 38px;
           height: 38px;
           display: grid;
           place-items: center;
           border-radius: 12px;
-          background: linear-gradient(
-            135deg,
-            var(--purple),
-            var(--blue)
-          );
-          box-shadow: 0 0 25px rgba(139, 67, 255, 0.5);
-        }
-
-        .logo span {
-          background: linear-gradient(
-            90deg,
-            white,
-            #caa3ff,
-            #58ddff
-          );
-          -webkit-background-clip: text;
-          color: transparent;
+          background: linear-gradient(135deg, #9b4dff, #24c9ff);
+          box-shadow: 0 0 25px rgba(143, 70, 255, 0.5);
         }
 
         .navLinks {
+          flex: 1;
           display: flex;
           justify-content: center;
-          gap: 23px;
-          flex: 1;
+          gap: 25px;
         }
 
         .navLinks a {
-          color: #aeb8d0;
-          font-size: 12px;
-          transition: 0.2s;
+          color: #aeb9d4;
+          font-size: 13px;
         }
 
         .navLinks a:hover {
           color: white;
         }
 
-        .navActions {
+        .navRight {
           display: flex;
           align-items: center;
           gap: 8px;
@@ -985,30 +675,81 @@ export default function Home() {
           height: 36px;
           display: grid;
           place-items: center;
-          border: 1px solid var(--line);
           border-radius: 50%;
+          border: 1px solid rgba(255, 255, 255, 0.15);
           background: rgba(255, 255, 255, 0.04);
         }
 
-        .walletButton {
+        .walletBtn {
           border: 0;
-          border-radius: 30px;
           padding: 12px 18px;
+          border-radius: 30px;
           color: white;
-          font-size: 11px;
+          font-size: 12px;
           font-weight: 800;
-          background: linear-gradient(
-            90deg,
-            var(--blue),
-            var(--purple)
-          );
-          box-shadow: 0 0 25px rgba(113, 64, 255, 0.35);
+          cursor: pointer;
+          background: linear-gradient(90deg, #27cfff, #9b43ff);
+          box-shadow: 0 0 25px rgba(120, 70, 255, 0.4);
+        }
+
+        .walletArea {
+          position: relative;
+        }
+
+        .walletInfo {
+          position: absolute;
+          top: 52px;
+          right: 0;
+          width: 240px;
+          padding: 15px;
+          border: 1px solid rgba(100, 130, 255, 0.3);
+          border-radius: 15px;
+          background: rgba(4, 10, 28, 0.97);
+          box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .walletInfo div {
+          display: flex;
+          justify-content: space-between;
+          gap: 15px;
+          margin-bottom: 8px;
+        }
+
+        .walletInfo div:last-child {
+          margin-bottom: 0;
+        }
+
+        .walletInfo span {
+          color: #71809d;
+          font-size: 10px;
+        }
+
+        .walletInfo strong {
+          color: #dce3f5;
+          font-size: 10px;
+        }
+
+        .walletMessage {
+          position: absolute;
+          top: 55px;
+          right: 0;
+          white-space: nowrap;
+          color: #92a0bd;
+          font-size: 10px;
+        }
+
+        .hamburger {
+          display: none;
+          border: 0;
+          background: transparent;
+          color: white;
+          font-size: 25px;
         }
 
         .section {
           width: min(1160px, calc(100% - 40px));
           margin: auto;
-          padding: 100px 0;
+          padding: 110px 0;
         }
 
         .hero {
@@ -1017,20 +758,17 @@ export default function Home() {
           display: grid;
           grid-template-columns: 0.9fr 1.1fr;
           align-items: center;
-          gap: 30px;
         }
 
         .badge {
-          width: fit-content;
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          gap: 9px;
-          padding: 8px 14px;
-          border: 1px solid var(--line);
-          border-radius: 999px;
-          color: #d5dcf3;
-          background: rgba(20, 31, 70, 0.5);
-          font-size: 10px;
+          gap: 8px;
+          padding: 8px 15px;
+          border-radius: 30px;
+          border: 1px solid rgba(100, 130, 255, 0.35);
+          color: #cbd5f5;
+          font-size: 11px;
           font-weight: 800;
         }
 
@@ -1038,131 +776,113 @@ export default function Home() {
           width: 7px;
           height: 7px;
           border-radius: 50%;
-          background: var(--blue);
-          box-shadow: 0 0 12px var(--blue);
+          background: #3fd7ff;
+          box-shadow: 0 0 15px #3fd7ff;
         }
 
         .hero h1 {
-          margin: 25px 0 10px;
-          font-size: clamp(80px, 11vw, 145px);
+          margin: 20px 0;
+          font-size: clamp(75px, 10vw, 135px);
           line-height: 0.9;
-          letter-spacing: -9px;
-          font-weight: 900;
-          background: linear-gradient(
-            180deg,
-            white,
-            #e9e5ff 40%,
-            #9149ff
-          );
+          letter-spacing: -8px;
+          background: linear-gradient(#fff, #eee, #8e4bff);
           -webkit-background-clip: text;
           color: transparent;
-          filter: drop-shadow(
-            0 0 30px rgba(139, 67, 255, 0.35)
-          );
         }
 
         .hero h1 span {
-          color: white;
-          -webkit-text-fill-color: white;
-        }
-
-        .hero h2 {
-          margin: 20px 0 15px;
-          font-size: clamp(23px, 3vw, 38px);
-          font-weight: 900;
-        }
-
-        .hero h2 b,
-        .sectionHeading b,
-        .aboutText b,
-        .community b {
-          background: linear-gradient(
-            90deg,
-            var(--purple),
-            var(--blue)
-          );
+          background: linear-gradient(90deg, #a14bff, #35caff);
           -webkit-background-clip: text;
           color: transparent;
         }
 
-        .heroContent > p {
-          color: var(--muted);
+        .hero h2 {
+          font-size: clamp(23px, 3vw, 37px);
+        }
+
+        .hero h2 b {
+          background: linear-gradient(90deg, #a44dff, #38caff);
+          -webkit-background-clip: text;
+          color: transparent;
+        }
+
+        .heroText > p {
+          color: #9aa7c2;
           line-height: 1.8;
         }
 
-        .timer {
+        .countdown {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          max-width: 450px;
           gap: 8px;
+          max-width: 430px;
           margin: 30px 0;
         }
 
-        .timer div {
-          padding: 13px 7px;
+        .countdown div {
+          padding: 13px 5px;
           text-align: center;
-          border: 1px solid var(--line);
+          border: 1px solid rgba(110, 135, 255, 0.25);
           border-radius: 12px;
-          background: rgba(6, 17, 40, 0.75);
+          background: rgba(8, 18, 42, 0.75);
         }
 
-        .timer strong {
+        .countdown strong {
           display: block;
           font-size: 23px;
         }
 
-        .timer small {
-          color: #7f8ca8;
+        .countdown small {
+          color: #7e8ba8;
           font-size: 8px;
         }
 
-        .heroButtons {
+        .buttons {
           display: flex;
           gap: 10px;
         }
 
-        .primaryButton,
-        .secondaryButton {
+        .primary,
+        .secondary {
           min-height: 48px;
           padding: 0 24px;
+          border-radius: 30px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          border-radius: 30px;
           font-size: 11px;
           font-weight: 900;
+          cursor: pointer;
         }
 
-        .primaryButton {
-          background: linear-gradient(
-            90deg,
-            var(--blue),
-            var(--purple)
-          );
-          box-shadow: 0 0 28px rgba(107, 63, 255, 0.4);
+        .primary {
+          border: 0;
+          color: white;
+          background: linear-gradient(90deg, #27cfff, #9b43ff);
+          box-shadow: 0 0 25px rgba(120, 70, 255, 0.4);
         }
 
-        .secondaryButton {
-          border: 1px solid var(--line);
+        .secondary {
+          border: 1px solid rgba(110, 135, 255, 0.35);
           background: rgba(5, 12, 30, 0.7);
         }
 
-        .heroSocial {
-          margin-top: 25px;
+        .communityLinks {
           display: flex;
           align-items: center;
-          gap: 9px;
-          color: #7f8ba5;
-          font-size: 10px;
+          gap: 10px;
+          margin-top: 25px;
+          color: #7f8ca8;
+          font-size: 11px;
         }
 
-        .heroSocial a {
-          width: 31px;
-          height: 31px;
+        .communityLinks a {
+          width: 30px;
+          height: 30px;
           display: grid;
           place-items: center;
-          border: 1px solid var(--line);
           border-radius: 50%;
+          border: 1px solid rgba(120, 140, 255, 0.3);
         }
 
         .heroVisual {
@@ -1173,92 +893,56 @@ export default function Home() {
         }
 
         .planet {
-          width: 480px;
-          height: 480px;
+          width: 470px;
+          height: 470px;
           border-radius: 50%;
           background:
-            radial-gradient(
-              circle at 30% 25%,
-              #57e2ff,
-              #17479a 28%,
-              #081238 58%,
-              #01030c 75%
-            );
-          box-shadow:
-            inset -60px -50px 100px #01020b,
-            0 0 80px rgba(45, 157, 255, 0.25);
+            radial-gradient(circle at 30% 30%, #55e0ff, #174a9e 25%, #08123a 60%, #01030e 72%);
+          box-shadow: 0 0 90px rgba(50, 150, 255, 0.25);
         }
 
         .orbit {
           position: absolute;
-          width: 560px;
-          height: 170px;
-          border: 1px solid rgba(140, 83, 255, 0.4);
+          width: 570px;
+          height: 180px;
+          border: 1px solid rgba(130, 80, 255, 0.45);
           border-radius: 50%;
         }
 
         .orbit1 {
-          transform: rotate(-17deg);
+          transform: rotate(-20deg);
         }
 
         .orbit2 {
           transform: rotate(20deg);
-          border-color: rgba(44, 202, 255, 0.25);
-        }
-
-        .moon {
-          position: absolute;
-          width: 70px;
-          height: 70px;
-          right: 5%;
-          top: 5%;
-          border-radius: 50%;
-          background: radial-gradient(
-            circle at 30% 30%,
-            #d8d4e6,
-            #2b2b47
-          );
+          border-color: rgba(40, 200, 255, 0.3);
         }
 
         .fox {
           position: absolute;
-          z-index: 3;
-          font-size: 210px;
-          top: 130px;
-          left: 23%;
-          filter: drop-shadow(
-            0 0 30px rgba(160, 70, 255, 0.8)
-          );
+          z-index: 5;
+          font-size: 220px;
+          filter: drop-shadow(0 0 35px rgba(170, 70, 255, 0.7));
           animation: float 4s ease-in-out infinite;
         }
 
         @keyframes float {
           50% {
-            transform: translateY(-18px) rotate(2deg);
+            transform: translateY(-18px);
           }
-        }
-
-        .astronaut {
-          position: absolute;
-          right: 7%;
-          top: 5%;
-          font-size: 55px;
-          animation: float 3s ease-in-out infinite;
         }
 
         .rocket {
           position: absolute;
-          right: 8%;
-          bottom: 20%;
-          font-size: 60px;
-          transform: rotate(-20deg);
-          filter: drop-shadow(0 0 20px #a84fff);
-          animation: rocket 3s ease-in-out infinite;
+          right: 10%;
+          top: 5%;
+          font-size: 65px;
+          animation: rocket 3s infinite ease-in-out;
         }
 
         @keyframes rocket {
           50% {
-            transform: translateY(-14px) rotate(-20deg);
+            transform: translateY(-15px) rotate(-10deg);
           }
         }
 
@@ -1267,299 +951,102 @@ export default function Home() {
           right: 0;
           bottom: 30px;
           width: 290px;
-          padding: 16px;
-          border: 1px solid var(--line);
+          padding: 15px;
+          border: 1px solid rgba(100, 130, 255, 0.3);
           border-radius: 15px;
-          background: rgba(4, 13, 31, 0.82);
-          color: #cbd4ea;
-          font-size: 10px;
-          line-height: 1.7;
+          background: rgba(4, 13, 31, 0.8);
+          color: #c9d1e6;
+          font-size: 11px;
+          line-height: 1.6;
         }
 
         .quote b {
           display: block;
-          color: #ffb43e;
+          color: #ffb23d;
         }
 
-        .sectionHeading {
+        .title {
           margin-bottom: 35px;
         }
 
-        .sectionHeading > span,
-        .aboutText > span,
-        .community > div > span {
+        .title > span {
           color: #8996b5;
           font-size: 10px;
           font-weight: 900;
           letter-spacing: 3px;
         }
 
-        .sectionHeading h2,
-        .aboutText h2,
-        .community h2 {
-          margin: 9px 0;
-          font-size: clamp(32px, 5vw, 50px);
-          line-height: 1;
+        .title h2 {
+          font-size: 45px;
+          margin: 8px 0;
         }
 
-        .sectionHeading p,
-        .aboutText p,
-        .community p {
-          max-width: 650px;
-          color: var(--muted);
-          line-height: 1.8;
+        .title h2 b {
+          background: linear-gradient(90deg, #a34cff, #35caff);
+          -webkit-background-clip: text;
+          color: transparent;
         }
 
-        .center {
-          text-align: center;
+        .title p {
+          color: #8996b5;
         }
 
-        .center p {
-          margin-left: auto;
-          margin-right: auto;
-        }
-
-        .stats {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 12px;
-        }
-
-        .card {
-          min-height: 190px;
-          padding: 20px;
-          border: 1px solid var(--line);
-          border-radius: 18px;
-          background: var(--card);
-        }
-
-        .card > span {
-          display: grid;
-          place-items: center;
-          width: 42px;
-          height: 42px;
-          margin-bottom: 25px;
-          border-radius: 12px;
-          background: rgba(121, 69, 255, 0.13);
-          color: #a271ff;
-        }
-
-        .card small {
-          display: block;
-          color: #7f8ba5;
-          font-size: 9px;
-          margin-bottom: 7px;
-        }
-
-        .card strong {
-          display: block;
-          font-size: 18px;
-        }
-
-        .card em {
-          display: block;
-          margin-top: 5px;
-          color: #707d99;
-          font-style: normal;
-          font-size: 9px;
-        }
-
-        .swapSection {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-        }
-
-        .swapCard {
-          width: min(470px, 100%);
-          padding: 20px;
-          border: 1px solid rgba(120, 90, 255, 0.35);
-          border-radius: 22px;
-          background:
-            linear-gradient(
-              145deg,
-              rgba(14, 28, 65, 0.9),
-              rgba(6, 10, 28, 0.95)
-            );
-          box-shadow: 0 25px 80px rgba(0, 0, 0, 0.35);
-        }
-
-        .swapHeader {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 15px;
-          font-weight: 800;
-        }
-
-        .demoTag {
-          padding: 5px 9px;
-          border-radius: 20px;
-          color: #56dfff;
-          background: rgba(50, 200, 255, 0.08);
-          font-size: 8px;
-        }
-
-        .inputBox {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 17px;
-          border: 1px solid rgba(110, 130, 255, 0.2);
-          border-radius: 15px;
-          background: rgba(0, 0, 0, 0.2);
-        }
-
-        .inputBox div {
-          flex: 1;
-        }
-
-        .inputBox span {
-          display: block;
-          color: #74819e;
-          font-size: 8px;
-          margin-bottom: 7px;
-        }
-
-        .inputBox input {
-          width: 100%;
-          border: 0;
-          outline: 0;
-          background: transparent;
-          color: white;
-          font-size: 25px;
-          font-weight: 800;
-        }
-
-        .inputBox strong {
-          color: #a878ff;
-        }
-
-        .swapArrow {
-          width: 40px;
-          height: 40px;
-          display: grid;
-          place-items: center;
-          margin: -4px auto;
-          position: relative;
-          z-index: 2;
-          border: 1px solid var(--line);
-          border-radius: 50%;
-          background: #07112b;
-          color: #a873ff;
-        }
-
-        .rate {
-          display: flex;
-          justify-content: space-between;
-          margin: 17px 0;
-          color: #7785a2;
-          font-size: 9px;
-        }
-
-        .rate strong {
-          color: #dce2f3;
-        }
-
-        .swapButton {
-          width: 100%;
-          min-height: 50px;
-          border: 0;
-          border-radius: 13px;
-          color: white;
-          font-weight: 900;
-          background: linear-gradient(
-            90deg,
-            var(--blue),
-            var(--purple)
-          );
-        }
-
-        .status {
-          margin-top: 12px;
-          padding: 12px;
-          border: 1px solid rgba(50, 220, 255, 0.2);
-          border-radius: 10px;
-          color: #62ddff;
-          background: rgba(30, 190, 255, 0.06);
-          text-align: center;
-          font-size: 10px;
-        }
-
-        .warning {
-          display: block;
-          margin-top: 12px;
-          color: #687690;
-          text-align: center;
-          font-size: 8px;
-        }
-
-        .about {
+        .aboutGrid,
+        .tokenGrid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          align-items: center;
-          gap: 55px;
+          gap: 20px;
         }
 
-        .aboutVisual {
-          height: 350px;
-          position: relative;
+        .aboutCard,
+        .donutCard,
+        .allocation {
+          min-height: 350px;
+          padding: 30px;
+          border: 1px solid rgba(100, 125, 255, 0.25);
+          border-radius: 20px;
+          background: rgba(6, 16, 37, 0.75);
+        }
+
+        .aboutCard {
           display: grid;
           place-items: center;
-          overflow: hidden;
-          border: 1px solid var(--line);
-          border-radius: 22px;
-          background: #050c22;
-        }
-
-        .aboutPlanet {
-          width: 300px;
-          height: 300px;
-          border-radius: 50%;
-          background: radial-gradient(
-            circle at 30% 30%,
-            #44d6ff,
-            #18336e 40%,
-            #020716 72%
-          );
+          background:
+            radial-gradient(circle, rgba(100, 60, 255, 0.3), transparent 45%),
+            rgba(6, 16, 37, 0.75);
         }
 
         .bigFox {
-          position: absolute;
-          font-size: 150px;
-          filter: drop-shadow(
-            0 0 35px rgba(145, 65, 255, 0.75)
-          );
-          animation: float 4s infinite ease-in-out;
+          font-size: 160px;
+          filter: drop-shadow(0 0 35px rgba(150, 70, 255, 0.7));
+        }
+
+        .aboutContent {
+          padding: 25px;
+        }
+
+        .aboutContent h3 {
+          font-size: 25px;
+        }
+
+        .aboutContent p {
+          color: #96a2bd;
+          line-height: 1.8;
         }
 
         .pills {
           display: flex;
           flex-wrap: wrap;
-          gap: 9px;
+          gap: 8px;
           margin-top: 25px;
         }
 
         .pills span {
-          padding: 9px 13px;
-          border: 1px solid var(--line);
-          border-radius: 30px;
-          color: #b9c4dc;
-          font-size: 9px;
-        }
-
-        .tokenGrid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 15px;
-        }
-
-        .donutCard,
-        .allocation {
-          min-height: 400px;
-          padding: 30px;
-          border: 1px solid var(--line);
+          padding: 9px 12px;
+          border: 1px solid rgba(100, 125, 255, 0.25);
           border-radius: 20px;
-          background: var(--card);
+          color: #b8c3dc;
+          font-size: 10px;
         }
 
         .donutCard {
@@ -1568,41 +1055,34 @@ export default function Home() {
         }
 
         .donut {
-          width: 270px;
-          height: 270px;
+          width: 260px;
+          height: 260px;
           display: grid;
           place-items: center;
           border-radius: 50%;
           background: conic-gradient(
-            var(--purple) 0 70%,
-            #d65cbc 70% 90%,
-            var(--orange) 90% 100%
+            #8d45ff 0 70%,
+            #d557bc 70% 90%,
+            #ff9b36 90% 100%
           );
-          box-shadow: 0 0 60px rgba(130, 70, 255, 0.2);
         }
 
-        .donut::before {
-          content: "";
-          position: absolute;
-          width: 190px;
-          height: 190px;
+        .donut > div {
+          width: 175px;
+          height: 175px;
+          display: grid;
+          place-items: center;
+          align-content: center;
           border-radius: 50%;
           background: #061026;
         }
 
-        .donut div {
-          position: relative;
-          z-index: 2;
-          text-align: center;
-        }
-
         .donut strong {
-          display: block;
-          font-size: 42px;
+          font-size: 40px;
         }
 
         .donut span {
-          color: #8490aa;
+          color: #7d8aa6;
           font-size: 10px;
         }
 
@@ -1610,175 +1090,70 @@ export default function Home() {
           display: flex;
           flex-direction: column;
           justify-content: center;
-        }
-
-        .allocationItem {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-top: 15px;
-        }
-
-        .allocationItem div {
-          display: flex;
-          align-items: center;
           gap: 8px;
         }
 
-        .allocationItem i {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-        }
-
-        .purpleDot {
-          background: var(--purple);
-        }
-
-        .blueDot {
-          background: var(--blue);
-        }
-
-        .orangeDot {
-          background: var(--orange);
+        .allocationRow {
+          display: flex;
+          justify-content: space-between;
+          margin-top: 10px;
         }
 
         .bar {
           height: 7px;
-          margin: 9px 0;
+          margin-bottom: 10px;
           border-radius: 10px;
-          background: rgba(255, 255, 255, 0.05);
+          background: rgba(255, 255, 255, 0.06);
           overflow: hidden;
         }
 
         .bar span {
           display: block;
           height: 100%;
-          border-radius: inherit;
-          background: linear-gradient(
-            90deg,
-            var(--purple),
-            var(--blue)
-          );
+          background: linear-gradient(90deg, #8d45ff, #35caff);
         }
 
         .allocation p {
-          color: #6e7b96;
-          font-size: 9px;
+          color: #697792;
+          font-size: 10px;
           line-height: 1.7;
-          margin-top: 20px;
         }
 
         .roadmap {
           display: grid;
           grid-template-columns: 1fr auto 1fr auto 1fr;
-          gap: 12px;
           align-items: center;
+          gap: 10px;
         }
 
         .roadCard {
-          min-height: 280px;
-          padding: 27px;
-          border: 1px solid rgba(150, 75, 255, 0.35);
+          min-height: 260px;
+          padding: 25px;
+          border: 1px solid rgba(140, 70, 255, 0.35);
           border-radius: 18px;
-          background: rgba(30, 13, 55, 0.55);
+          background: rgba(40, 15, 70, 0.4);
         }
 
-        .roadCard.blue {
-          border-color: rgba(40, 200, 255, 0.3);
+        .roadCard h3 {
+          margin: 10px 0 25px;
         }
 
-        .roadCard.orange {
-          border-color: rgba(255, 160, 60, 0.3);
+        .roadCard li {
+          margin: 12px 0;
+          color: #b3bdd4;
+          font-size: 11px;
         }
 
-        .roadCard > span {
-          color: #a879ff;
+        .phase {
+          color: #a875ff;
           font-size: 9px;
           font-weight: 900;
           letter-spacing: 2px;
         }
 
-        .roadCard.blue > span {
-          color: var(--blue);
-        }
-
-        .roadCard.orange > span {
-          color: var(--orange);
-        }
-
-        .roadCard h3 {
-          margin: 8px 0 25px;
-        }
-
-        .roadCard ul {
-          display: grid;
-          gap: 14px;
-          padding: 0;
-          margin: 0;
-          list-style: none;
-          color: #b5bfd5;
-          font-size: 10px;
-        }
-
-        .roadArrow {
-          color: #687592;
-          font-size: 28px;
-        }
-
-        .community {
-          min-height: 320px;
-          padding: 50px;
-          position: relative;
-          overflow: hidden;
-          display: flex;
-          align-items: center;
-          border: 1px solid var(--line);
-          border-radius: 25px;
-          background:
-            radial-gradient(
-              circle at 85% 50%,
-              rgba(42, 154, 255, 0.25),
-              transparent 30%
-            ),
-            linear-gradient(
-              135deg,
-              rgba(9, 26, 60, 0.9),
-              rgba(30, 8, 57, 0.9)
-            );
-        }
-
-        .communityFox {
-          position: absolute;
-          right: 10%;
-          font-size: 170px;
-          filter: drop-shadow(
-            0 0 35px rgba(145, 70, 255, 0.6)
-          );
-          animation: float 4s infinite ease-in-out;
-        }
-
-        .communityButtons {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-          margin-top: 25px;
-        }
-
-        .communityButtons a {
-          padding: 13px 20px;
-          border-radius: 12px;
-          font-size: 10px;
-          font-weight: 900;
-        }
-
-        .communityButtons a:first-child {
-          background: white;
-          color: #070b19;
-        }
-
-        .communityButtons a:last-child {
-          background: #229bd3;
+        .arrow {
+          font-size: 30px;
+          color: #687492;
         }
 
         .faq {
@@ -1788,379 +1163,394 @@ export default function Home() {
         }
 
         .faqItem {
-          border: 1px solid var(--line);
+          border: 1px solid rgba(100, 125, 255, 0.22);
           border-radius: 13px;
-          overflow: hidden;
           background: rgba(6, 16, 37, 0.65);
+          overflow: hidden;
         }
 
         .faqItem button {
           width: 100%;
-          padding: 17px;
+          padding: 18px;
           display: flex;
           justify-content: space-between;
           border: 0;
           background: transparent;
           color: white;
+          cursor: pointer;
           text-align: left;
-          font-size: 10px;
+          font-size: 11px;
         }
 
         .faqItem button b {
-          color: #a06cff;
+          color: #9c69ff;
           font-size: 18px;
         }
 
         .faqItem p {
-          margin: 0;
-          padding: 0 17px 17px;
-          color: #8490aa;
+          padding: 0 18px 18px;
+          color: #8996b2;
+          font-size: 11px;
           line-height: 1.7;
+        }
+
+        .communityBox {
+          min-height: 320px;
+          padding: 50px;
+          position: relative;
+          overflow: hidden;
+          border: 1px solid rgba(100, 125, 255, 0.3);
+          border-radius: 25px;
+          background:
+            radial-gradient(circle at 80%, rgba(70, 120, 255, 0.3), transparent 35%),
+            rgba(8, 20, 48, 0.8);
+        }
+
+        .communityBox > div:first-child {
+          position: relative;
+          z-index: 2;
+        }
+
+        .communityBox span {
+          color: #8b98b5;
           font-size: 10px;
+          font-weight: 900;
+          letter-spacing: 3px;
         }
 
-        .notify {
-          padding: 35px;
+        .communityBox h2 {
+          font-size: 43px;
+        }
+
+        .communityBox h2 b {
+          color: #3bcaff;
+        }
+
+        .communityBox p {
+          color: #96a3bf;
+        }
+
+        .communityButtons {
           display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 25px;
-          border: 1px solid var(--line);
-          border-radius: 20px;
-          background: rgba(7, 18, 42, 0.8);
+          gap: 10px;
+          margin-top: 25px;
         }
 
-        .notify h2 {
+        .communityButtons a {
+          padding: 13px 20px;
+          border-radius: 12px;
+          background: white;
+          color: #050817;
+          font-size: 11px;
+          font-weight: 900;
+        }
+
+        .communityButtons a + a {
+          background: #27aef1;
+          color: white;
+        }
+
+        .communityFox {
+          position: absolute;
+          right: 10%;
+          top: 35px;
+          font-size: 210px;
+          filter: drop-shadow(0 0 35px rgba(120, 70, 255, 0.6));
+        }
+
+        .notifySection {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 30px;
+          padding: 30px;
+          border: 1px solid rgba(100, 125, 255, 0.25);
+          border-radius: 20px;
+          background: rgba(7, 18, 42, 0.75);
+        }
+
+        .notifySection > div > span {
+          color: #8996b5;
+          font-size: 10px;
+          letter-spacing: 3px;
+          font-weight: 900;
+        }
+
+        .notifySection h2 {
           margin: 7px 0;
         }
 
-        .notify p {
-          margin: 0;
-          color: #7e8ba5;
+        .notifySection p {
+          color: #7886a3;
           font-size: 11px;
         }
 
-        .notify form {
-          width: min(430px, 100%);
+        .notifySection form {
+          min-width: 400px;
           display: flex;
           padding: 5px;
-          border: 1px solid var(--line);
+          border: 1px solid rgba(110, 130, 255, 0.25);
           border-radius: 40px;
         }
 
-        .notify input {
-          min-width: 0;
+        .notifySection input {
           flex: 1;
+          min-width: 0;
           padding: 12px 15px;
           border: 0;
           outline: 0;
           background: transparent;
           color: white;
-          font-size: 10px;
         }
 
-        .notify button {
-          padding: 0 20px;
+        .notifySection button {
           border: 0;
+          padding: 0 20px;
           border-radius: 30px;
-          background: linear-gradient(
-            90deg,
-            var(--blue),
-            var(--purple)
-          );
           color: white;
-          font-size: 10px;
-          font-weight: 900;
+          background: linear-gradient(90deg, #27cfff, #9b43ff);
+          cursor: pointer;
         }
 
-        .emailStatus {
-          margin-top: 10px;
-          color: #5edfff;
-          text-align: center;
-          font-size: 10px;
+        .subscribed {
+          padding: 14px 20px;
+          border-radius: 30px;
+          background: rgba(120, 70, 255, 0.2);
         }
 
         footer {
-          border-top: 1px solid rgba(110, 130, 255, 0.15);
+          padding: 40px 20px;
+          text-align: center;
+          border-top: 1px solid rgba(100, 125, 255, 0.15);
         }
 
-        .footerInner {
-          width: min(1160px, calc(100% - 40px));
-          margin: auto;
-          padding: 40px 0;
-          display: grid;
-          grid-template-columns: 1fr auto 1fr;
-          align-items: center;
-          gap: 25px;
+        footer .logo {
+          justify-content: center;
         }
 
-        .footerInner p {
+        footer p,
+        footer small {
           color: #697792;
-          font-size: 9px;
-          line-height: 1.7;
+          font-size: 10px;
         }
 
-        .footerLinks {
+        footer > div:last-of-type {
           display: flex;
+          justify-content: center;
           gap: 10px;
+          margin: 20px 0;
         }
 
-        .footerLinks a {
-          width: 37px;
-          height: 37px;
+        footer a {
+          width: 36px;
+          height: 36px;
           display: grid;
           place-items: center;
-          border: 1px solid var(--line);
+          border: 1px solid rgba(120, 140, 190, 0.3);
           border-radius: 50%;
         }
 
-        .copyright {
-          text-align: right;
-          color: #697792;
-          font-size: 9px;
-          line-height: 1.8;
-        }
-
-        .modalOverlay {
+        .toast {
           position: fixed;
-          inset: 0;
-          z-index: 500;
-          display: grid;
-          place-items: center;
-          padding: 20px;
-          background: rgba(0, 0, 0, 0.72);
-          backdrop-filter: blur(10px);
-        }
-
-        .walletModal {
-          width: min(410px, 100%);
-          position: relative;
-          padding: 30px;
-          border: 1px solid rgba(130, 90, 255, 0.45);
-          border-radius: 22px;
-          background:
-            linear-gradient(
-              145deg,
-              #0b1738,
-              #050916
-            );
-          box-shadow: 0 30px 100px rgba(0, 0, 0, 0.7);
-        }
-
-        .closeModal {
-          position: absolute;
-          right: 15px;
-          top: 12px;
-          border: 0;
-          background: transparent;
-          color: #8794af;
-          font-size: 25px;
-        }
-
-        .modalIcon {
-          width: 55px;
-          height: 55px;
-          display: grid;
-          place-items: center;
-          margin-bottom: 15px;
-          border-radius: 15px;
-          background: rgba(130, 70, 255, 0.15);
-          font-size: 25px;
-        }
-
-        .walletModal h3 {
-          margin: 0 0 8px;
-          font-size: 22px;
-        }
-
-        .walletModal > p {
-          color: #8490aa;
-          font-size: 10px;
-          line-height: 1.6;
-        }
-
-        .walletOption {
-          width: 100%;
-          margin-top: 10px;
-          padding: 15px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          border: 1px solid var(--line);
-          border-radius: 12px;
-          background: rgba(255, 255, 255, 0.03);
-          color: white;
+          left: 50%;
+          bottom: 25px;
+          transform: translateX(-50%);
+          z-index: 999;
+          padding: 13px 20px;
+          border: 1px solid rgba(120, 90, 255, 0.5);
+          border-radius: 30px;
+          background: rgba(10, 18, 40, 0.95);
           font-size: 11px;
-          text-align: left;
         }
 
-        .walletOption:hover {
-          border-color: #995cff;
-          background: rgba(140, 70, 255, 0.08);
-        }
-
-        .walletModal small {
-          display: block;
-          margin-top: 18px;
-          color: #65728d;
-          text-align: center;
-          font-size: 8px;
-        }
-
-        @media (max-width: 1000px) {
-          .hero {
-            grid-template-columns: 1fr;
-          }
-
-          .heroVisual {
-            margin-top: 20px;
-          }
-
-          .stats {
-            grid-template-columns: 1fr 1fr;
-          }
-        }
-
-        @media (max-width: 760px) {
-          .navbarWrap {
-            padding: 0 10px;
-          }
-
-          .navbar {
-            gap: 10px;
-          }
-
-          .navLinks {
-            display: none;
-          }
-
-          .social {
-            display: none;
-          }
-
-          .walletButton {
-            padding: 10px 12px;
-            font-size: 9px;
-          }
-
-          .section {
-            width: calc(100% - 24px);
-            padding: 70px 0;
-          }
-
-          .hero {
-            padding-top: 130px;
-          }
-
-          .heroButtons {
-            flex-direction: column;
-          }
-
-          .heroButtons a {
-            width: 100%;
-          }
-
-          .heroVisual {
-            height: 430px;
-            transform: scale(0.78);
-            margin: -30px;
-          }
-
-          .planet {
-            width: 350px;
-            height: 350px;
-          }
-
-          .fox {
-            font-size: 150px;
-            left: 20%;
-            top: 120px;
-          }
-
-          .quote {
-            bottom: 0;
-          }
-
-          .about,
+        @media (max-width: 900px) {
+          .hero,
+          .aboutGrid,
           .tokenGrid {
             grid-template-columns: 1fr;
+          }
+
+          .heroVisual {
+            margin-top: 30px;
+          }
+
+          .overviewGrid {
+            grid-template-columns: 1fr 1fr;
           }
 
           .roadmap {
             grid-template-columns: 1fr;
           }
 
-          .roadArrow {
+          .arrow {
             display: none;
+          }
+
+          .communityFox {
+            opacity: 0.25;
+          }
+
+          .notifySection {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .notifySection form {
+            min-width: 0;
+          }
+        }
+
+        @media (max-width: 700px) {
+          .navbarWrap {
+            padding: 0 10px;
+          }
+
+          .navLinks {
+            display: none;
+            position: absolute;
+            top: 75px;
+            left: 10px;
+            right: 10px;
+            padding: 15px;
+            flex-direction: column;
+            background: rgba(4, 10, 27, 0.98);
+            border: 1px solid rgba(100, 125, 255, 0.25);
+            border-radius: 15px;
+          }
+
+          .navLinks.open {
+            display: flex;
+          }
+
+          .social {
+            display: none;
+          }
+
+          .hamburger {
+            display: block;
+          }
+
+          .walletBtn {
+            padding: 10px 12px;
+            font-size: 10px;
+          }
+
+          .section {
+            width: calc(100% - 24px);
+            padding: 75px 0;
+          }
+
+          .hero {
+            padding-top: 130px;
+          }
+
+          .hero h1 {
+            font-size: 80px;
+          }
+
+          .heroVisual {
+            height: 430px;
+          }
+
+          .planet {
+            width: 330px;
+            height: 330px;
+          }
+
+          .fox {
+            font-size: 150px;
+          }
+
+          .orbit {
+            width: 390px;
           }
 
           .faq {
             grid-template-columns: 1fr;
           }
 
-          .community {
+          .communityBox {
             padding: 30px;
           }
 
+          .communityBox h2 {
+            font-size: 32px;
+          }
+
+          .communityButtons {
+            flex-direction: column;
+          }
+
+          .communityButtons a {
+            text-align: center;
+          }
+
           .communityFox {
-            opacity: 0.2;
-            right: -20px;
+            right: -30px;
+            font-size: 150px;
           }
 
-          .notify {
-            flex-direction: column;
-            align-items: stretch;
-          }
-
-          .notify form {
-            width: 100%;
-          }
-
-          .footerInner {
-            grid-template-columns: 1fr;
-            text-align: center;
-          }
-
-          .footerInner > div {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-          }
-
-          .copyright {
-            text-align: center;
-          }
-        }
-
-        @media (max-width: 480px) {
-          .stats {
-            grid-template-columns: 1fr;
-          }
-
-          .timer {
-            gap: 4px;
-          }
-
-          .timer strong {
-            font-size: 18px;
-          }
-
-          .hero h1 {
-            font-size: 70px;
-            letter-spacing: -5px;
-          }
-
-          .notify form {
-            flex-direction: column;
-            border-radius: 14px;
-            gap: 5px;
-          }
-
-          .notify button {
-            min-height: 40px;
+          .walletInfo {
+            right: -40px;
           }
         }
       `}</style>
     </main>
+  );
+}
+
+function Allocation({
+  name,
+  value,
+  width,
+}: {
+  name: string;
+  value: string;
+  width: string;
+}) {
+  return (
+    <>
+      <div className="allocationRow">
+        <span>{name}</span>
+        <strong>{value}</strong>
+      </div>
+
+      <div className="bar">
+        <span style={{ width }} />
+      </div>
+    </>
+  );
+}
+
+function Road({
+  phase,
+  title,
+  items,
+}: {
+  phase: string;
+  title: string;
+  items: string[];
+}) {
+  return (
+    <div className="roadCard">
+      <span className="phase">{phase}</span>
+      <h3>{title}</h3>
+
+      <ul>
+        {items.map((item) => (
+          <li key={item}>✓ {item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        <NovaSite />
+      </QueryClientProvider>
+    </WagmiProvider>
   );
 }
