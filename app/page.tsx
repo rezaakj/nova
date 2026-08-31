@@ -1,121 +1,77 @@
 "use client";
 
-import { useState } from "react";
-import {
-  WagmiProvider,
-  createConfig,
-  http,
-  useAccount,
-  useConnect,
-  useDisconnect,
-  useChainId,
-} from "wagmi";
-import { injected } from "wagmi/connectors";
-import { mainnet } from "wagmi/chains";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useAccount, useConnect, useDisconnect } from "wagmi";
 
-const config = createConfig({
-  chains: [mainnet],
-  connectors: [injected()],
-  transports: {
-    [mainnet.id]: http(),
+const TOTAL_SUPPLY = "1,000,000,000";
+
+// 40 days from August 31, 2026
+const LAUNCH_DATE = new Date("2026-10-10T20:00:00+03:30").getTime();
+
+const faqs = [
+  {
+    q: "When will NOVA launch?",
+    a: "NOVA is currently preparing for launch. Follow the official channels for announcements.",
   },
-});
+  {
+    q: "How can I buy NOVA?",
+    a: "Official purchase information will only be published after the project launch details are finalized.",
+  },
+  {
+    q: "Which wallet can I use?",
+    a: "A compatible browser wallet can be connected to the website.",
+  },
+  {
+    q: "Will there be a presale?",
+    a: "Official presale information will be announced through NOVA channels.",
+  },
+  {
+    q: "Is NOVA audited?",
+    a: "Audit information will be published if and when an independent audit is completed.",
+  },
+  {
+    q: "Is this a long-term project?",
+    a: "NOVA is a community-focused concept with a roadmap that may evolve over time.",
+  },
+];
 
-const queryClient = new QueryClient();
-
-const TELEGRAM = "https://t.me/NOVAFOX18";
-const TWITTER = "https://x.com/NOVAverse12";
-
-function shortenAddress(address?: string) {
-  if (!address) return "";
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-}
-
-function WalletButton() {
-  const { address, isConnected } = useAccount();
-  const { connect, isPending } = useConnect();
-  const { disconnect } = useDisconnect();
-  const chainId = useChainId();
-
-  const [message, setMessage] = useState("");
-
-  const handleWallet = async () => {
-    if (isConnected) {
-      disconnect();
-      setMessage("Wallet disconnected.");
-      return;
-    }
-
-    try {
-      setMessage("");
-
-      connect(
-        { connector: injected() },
-        {
-          onSuccess: () => {
-            setMessage("Wallet connected successfully ✓");
-          },
-          onError: (error) => {
-            setMessage(error.message || "Wallet connection failed.");
-          },
-        }
-      );
-    } catch {
-      setMessage("Could not connect wallet.");
-    }
-  };
-
+function Logo({ small = false }: { small?: boolean }) {
   return (
-    <div className="walletArea">
-      <button className="walletBtn" onClick={handleWallet}>
-        {isPending
-          ? "Connecting..."
-          : isConnected
-            ? `${shortenAddress(address)} ✓`
-            : "Connect Wallet"}
-      </button>
-
-      {isConnected && (
-        <div className="walletInfo">
-          <div>
-            <span>Wallet</span>
-            <strong>{shortenAddress(address)}</strong>
-          </div>
-
-          <div>
-            <span>Network</span>
-            <strong>
-              {chainId === mainnet.id ? "Ethereum Mainnet" : `Chain ${chainId}`}
-            </strong>
-          </div>
-        </div>
-      )}
-
-      {message && <div className="walletMessage">{message}</div>}
-    </div>
-  );
-}
-
-function Logo() {
-  return (
-    <div className="logo">
-      <div className="logoMark">✦</div>
-      <span>NOVA</span>
+    <div className={`logo ${small ? "logoSmall" : ""}`}>
+      <div className="logoMark">
+        <span>✦</span>
+      </div>
+      <span className="logoText">NOVA</span>
     </div>
   );
 }
 
 function Stars() {
+  const stars = useMemo(
+    () =>
+      Array.from({ length: 90 }).map((_, i) => ({
+        id: i,
+        left: `${Math.random() * 100}%`,
+        top: `${Math.random() * 100}%`,
+        size: `${Math.random() * 3 + 1}px`,
+        delay: `${Math.random() * 5}s`,
+        duration: `${Math.random() * 4 + 3}s`,
+      })),
+    []
+  );
+
   return (
     <div className="stars">
-      {Array.from({ length: 70 }).map((_, i) => (
+      {stars.map((s) => (
         <span
-          key={i}
+          key={s.id}
           style={{
-            left: `${(i * 37) % 100}%`,
-            top: `${(i * 61) % 100}%`,
-            animationDelay: `${(i % 8) * 0.4}s`,
+            left: s.left,
+            top: s.top,
+            width: s.size,
+            height: s.size,
+            animationDelay: s.delay,
+            animationDuration: s.duration,
           }}
         />
       ))}
@@ -123,86 +79,153 @@ function Stars() {
   );
 }
 
-function NovaSite() {
+export default function Home() {
+  const { address, isConnected } = useAccount();
+  const { connect, connectors, isPending } = useConnect();
+  const { disconnect } = useDisconnect();
+
   const [menuOpen, setMenuOpen] = useState(false);
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [notify, setNotify] = useState("");
 
-  const faqs = [
-    {
-      q: "When will NOVA launch?",
-      a: "The official launch date will be announced through NOVA's official channels.",
-    },
-    {
-      q: "How can I buy NOVA?",
-      a: "NOVA purchase functionality will only be enabled after the official launch details are finalized.",
-    },
-    {
-      q: "Which wallet can I use?",
-      a: "Compatible browser wallets can connect to the website through the standard wallet connection interface.",
-    },
-    {
-      q: "Will there be a presale?",
-      a: "Official presale information will be published through NOVA's verified channels.",
-    },
-    {
-      q: "Is NOVA audited?",
-      a: "Audit information will be published if and when an independent audit is completed.",
-    },
-    {
-      q: "Is this a long-term project?",
-      a: "NOVA is being developed as a community-focused internet brand.",
-    },
-  ];
+  const [time, setTime] = useState({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+  });
 
-  const showNotify = (text: string) => {
-    setNotify(text);
-    setTimeout(() => setNotify(""), 3000);
+  useEffect(() => {
+    const update = () => {
+      const diff = Math.max(0, LAUNCH_DATE - Date.now());
+
+      setTime({
+        days: Math.floor(diff / 86400000),
+        hours: Math.floor((diff / 3600000) % 24),
+        minutes: Math.floor((diff / 60000) % 60),
+        seconds: Math.floor((diff / 1000) % 60),
+      });
+    };
+
+    update();
+
+    const timer = setInterval(update, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const showNotify = (message: string) => {
+    setNotify(message);
+
+    setTimeout(() => {
+      setNotify("");
+    }, 3000);
+  };
+
+  const connectWallet = () => {
+    if (isConnected) {
+      disconnect();
+      showNotify("Wallet disconnected.");
+      return;
+    }
+
+    if (!connectors.length) {
+      showNotify("No compatible wallet detected.");
+      return;
+    }
+
+    connect(
+      {
+        connector: connectors[0],
+      },
+      {
+        onSuccess() {
+          showNotify("Wallet connected successfully ✓");
+        },
+        onError() {
+          showNotify("Wallet connection was cancelled.");
+        },
+      }
+    );
+  };
+
+  const copyContract = async () => {
+    const contract = "TBA — Official contract not released";
+
+    try {
+      await navigator.clipboard.writeText(contract);
+      setCopied(true);
+      showNotify("Contract status copied!");
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch {
+      showNotify("Copy failed.");
+    }
   };
 
   const subscribe = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email.includes("@")) {
+    if (!email || !email.includes("@")) {
       showNotify("Please enter a valid email.");
       return;
     }
 
     setSubscribed(true);
     setEmail("");
+
     showNotify("You're on the NOVA notification list 🚀");
   };
 
+  const walletText = isPending
+    ? "Connecting..."
+    : isConnected && address
+      ? `${address.slice(0, 6)}...${address.slice(-4)} ✓`
+      : "Connect Wallet";
+
   return (
     <main>
+      <div className="pageGlow glowOne" />
+      <div className="pageGlow glowTwo" />
+
       <Stars />
 
       {notify && <div className="toast">{notify}</div>}
 
-      <header className="navbarWrap">
+      {/* NAVBAR */}
+
+      <header className="navWrap">
         <nav className="navbar">
-          <a href="#home">
+          <a href="#home" onClick={() => setMenuOpen(false)}>
             <Logo />
           </a>
 
-          <div className={`navLinks ${menuOpen ? "open" : ""}`}>
+          <div className={`navLinks ${menuOpen ? "mobileOpen" : ""}`}>
             <a href="#home" onClick={() => setMenuOpen(false)}>
               Home
             </a>
+
             <a href="#about" onClick={() => setMenuOpen(false)}>
               About
             </a>
+
             <a href="#tokenomics" onClick={() => setMenuOpen(false)}>
               Tokenomics
             </a>
+
             <a href="#roadmap" onClick={() => setMenuOpen(false)}>
               Roadmap
             </a>
+
             <a href="#faq" onClick={() => setMenuOpen(false)}>
               FAQ
             </a>
+
             <a href="#community" onClick={() => setMenuOpen(false)}>
               Community
             </a>
@@ -210,8 +233,8 @@ function NovaSite() {
 
           <div className="navRight">
             <a
-              className="social"
-              href={TWITTER}
+              className="socialMini"
+              href="https://x.com/NOVAverse12"
               target="_blank"
               rel="noreferrer"
             >
@@ -219,19 +242,29 @@ function NovaSite() {
             </a>
 
             <a
-              className="social"
-              href={TELEGRAM}
+              className="socialMini"
+              href="https://t.me/NOVAFOX18"
               target="_blank"
               rel="noreferrer"
             >
               ✈
             </a>
 
-            <WalletButton />
+            <button
+              className="themeBtn"
+              onClick={() => showNotify("NOVA mode is already active ✦")}
+            >
+              ☼
+            </button>
+
+            <button className="walletBtn" onClick={connectWallet}>
+              {walletText}
+            </button>
 
             <button
               className="hamburger"
               onClick={() => setMenuOpen((v) => !v)}
+              aria-label="Menu"
             >
               ☰
             </button>
@@ -239,59 +272,67 @@ function NovaSite() {
         </nav>
       </header>
 
+      {/* HERO */}
+
       <section className="hero section" id="home">
-        <div className="heroText">
-          <div className="badge">
-            <span />
+        <div className="heroContent">
+          <div className="launchBadge">
+            <span className="pulseDot" />
             🚀 LAUNCHING SOON
           </div>
 
           <h1>
-            $N<span>O</span>VA
+            <span className="dollar">$</span>N
+            <span className="orbitO">O</span>VA
           </h1>
 
           <h2>
-            THE NEXT <b>MEME IN ORBIT.</b>
+            THE NEXT <span>MEME IN ORBIT.</span>
           </h2>
 
-          <p>
-            Born on the internet.
+          <p className="heroText">
+            Born on the internet. Built for the community.
             <br />
-            Built for the community.
+            More than a token — it&apos;s a movement.
           </p>
 
           <div className="countdown">
             <div>
-              <strong>40</strong>
+              <strong>{String(time.days).padStart(2, "0")}</strong>
               <small>DAYS</small>
             </div>
+
             <div>
-              <strong>00</strong>
+              <strong>{String(time.hours).padStart(2, "0")}</strong>
               <small>HOURS</small>
             </div>
+
             <div>
-              <strong>00</strong>
+              <strong>{String(time.minutes).padStart(2, "0")}</strong>
               <small>MINUTES</small>
             </div>
+
             <div>
-              <strong>00</strong>
+              <strong>{String(time.seconds).padStart(2, "0")}</strong>
               <small>SECONDS</small>
             </div>
           </div>
 
-          <div className="buttons">
+          <div className="heroButtons">
             <button
-              className="primary"
+              className="primaryBtn"
               onClick={() =>
-                showNotify("NOVA launch is not live yet 🚀")
+                showNotify(
+                  "Official NOVA launch information will appear here."
+                )
               }
             >
-              🚀 BUY NOVA
+              🚀 NOVA INFO <span>→</span>
             </button>
 
             <a
-              className="secondary"
-              href={TWITTER}
+              className="secondaryBtn"
+              href="https://x.com/NOVAverse12"
               target="_blank"
               rel="noreferrer"
             >
@@ -299,218 +340,488 @@ function NovaSite() {
             </a>
           </div>
 
-          <div className="communityLinks">
+          <div className="communityRow">
             <span>Join the Community:</span>
-            <a href={TWITTER} target="_blank" rel="noreferrer">
+
+            <a
+              href="https://x.com/NOVAverse12"
+              target="_blank"
+              rel="noreferrer"
+            >
               𝕏
             </a>
-            <a href={TELEGRAM} target="_blank" rel="noreferrer">
+
+            <a
+              href="https://t.me/NOVAFOX18"
+              target="_blank"
+              rel="noreferrer"
+            >
               ✈
             </a>
+
+            <a href="#community">◈</a>
+            <a href="#community">↗</a>
           </div>
+
+          {isConnected && address && (
+            <div className="connectedBox">
+              <span>WALLET CONNECTED</span>
+              <strong>{address}</strong>
+            </div>
+          )}
         </div>
 
         <div className="heroVisual">
-          <div className="planet" />
+          <div className="planet planetMain" />
+          <div className="planet planetSmall" />
 
-          <div className="orbit orbit1" />
-          <div className="orbit orbit2" />
+          <div className="orbitRing ringOne" />
+          <div className="orbitRing ringTwo" />
+
+          <div className="comet cometOne" />
+          <div className="comet cometTwo" />
 
           <div className="fox">
-            🦊
+            <div className="foxGlow" />
+
+            <div className="helmet">
+              <div className="ear leftEar">▲</div>
+              <div className="ear rightEar">▲</div>
+
+              <div className="visor">
+                <div className="visorReflection" />
+
+                <div className="face">
+                  <div className="eye eyeL" />
+                  <div className="eye eyeR" />
+                  <div className="nose" />
+                  <div className="mouth">⌣</div>
+                </div>
+              </div>
+
+              <div className="helmetBand">NOVA</div>
+            </div>
+
+            <div className="spaceBody">
+              <div className="chest">✦</div>
+              <div className="arm armL" />
+              <div className="arm armR" />
+            </div>
           </div>
 
           <div className="rocket">🚀</div>
 
-          <div className="quote">
-            ★ We're not going to the moon...
-            <b>We're building a new orbit.</b>
+          <div className="heroQuote">
+            <span>★</span>
+            We&apos;re not going to the moon...
+            <b>We&apos;re building a new orbit.</b>
           </div>
         </div>
       </section>
 
-      <section className="section" id="about">
-        <div className="title">
-          <span>WHO IS NOVA?</span>
-          <h2>
-            About <b>NOVA</b>
-          </h2>
-          <p>Not just a token. A movement.</p>
+      {/* TOKEN OVERVIEW */}
+
+      <section className="section">
+        <div className="sectionHeader">
+          <div>
+            <span className="eyebrow">NOVA / TOKEN</span>
+
+            <h2>
+              Token Overview <span>$NOVA</span>
+            </h2>
+
+            <p>Simple. Transparent. Community focused.</p>
+          </div>
         </div>
 
-        <div className="aboutGrid">
-          <div className="aboutCard">
-            <div className="bigFox">🦊</div>
+        <div className="overviewGrid">
+          <div className="statCard">
+            <div className="statIcon">◈</div>
+
+            <small>Total Supply</small>
+
+            <strong>{TOTAL_SUPPLY}</strong>
+
+            <span>NOVA</span>
           </div>
 
-          <div className="aboutContent">
-            <h3>Born on the internet.</h3>
+          <div className="statCard">
+            <div className="statIcon">⌁</div>
 
-            <p>
-              NOVA is a community-focused meme token concept inspired by
-              internet culture, space and the unstoppable energy of crypto.
-            </p>
+            <small>Chain</small>
 
-            <p>
-              The mission is simple: build a recognizable brand, create a fun
-              community and develop transparently.
-            </p>
+            <strong>TBA</strong>
 
-            <div className="pills">
-              <span>✦ Community First</span>
-              <span>⌁ Fair Launch</span>
-              <span>🚀 No Fake Promises</span>
-              <span>∞ 100% Vibes</span>
+            <span>Official chain</span>
+          </div>
+
+          <div className="statCard">
+            <div className="statIcon">🚀</div>
+
+            <small>Status</small>
+
+            <strong>Coming Soon</strong>
+
+            <span>Pre-Launch</span>
+          </div>
+
+          <button
+            className="statCard contractCard"
+            onClick={copyContract}
+          >
+            <div className="statIcon">▣</div>
+
+            <small>Contract</small>
+
+            <strong>{copied ? "COPIED!" : "TBA"}</strong>
+
+            <span>Official contract not released</span>
+          </button>
+
+          <div className="priceCard">
+            <div className="priceTop">
+              <span>$ NOVA</span>
+              <b>TBA</b>
             </div>
+
+            <div className="fakeChart">
+              <svg viewBox="0 0 500 180" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient
+                    id="chartGradient"
+                    x1="0"
+                    x2="1"
+                  >
+                    <stop offset="0%" stopColor="#2acfff" />
+                    <stop offset="100%" stopColor="#a34cff" />
+                  </linearGradient>
+                </defs>
+
+                <path
+                  d="M0 150 C60 135 65 145 110 120 C150 100 160 125 205 90 C245 58 265 100 300 76 C340 48 350 70 380 35 C415 0 440 50 500 8"
+                  fill="none"
+                  stroke="url(#chartGradient)"
+                  strokeWidth="7"
+                />
+              </svg>
+            </div>
+
+            <small>Price will appear after official launch.</small>
           </div>
         </div>
       </section>
+
+      {/* ABOUT */}
+
+      <section className="section aboutSection" id="about">
+        <div className="aboutVisual">
+          <div className="miniPlanet" />
+
+          <div className="aboutFox">🦊</div>
+
+          <div
+            className="playButton"
+            onClick={() =>
+              showNotify("NOVA intro video coming soon!")
+            }
+          >
+            ▶
+          </div>
+        </div>
+
+        <div className="aboutText">
+          <span className="eyebrow">WHO IS NOVA?</span>
+
+          <h2>
+            About <span>NOVA</span>
+          </h2>
+
+          <h3>Not just a token. A movement.</h3>
+
+          <p>
+            NOVA is a community-focused meme project inspired by
+            internet culture, space and the unstoppable energy of
+            online communities.
+          </p>
+
+          <p>
+            The mission is simple: build a recognizable internet
+            brand, create a strong community and develop transparently.
+          </p>
+
+          <div className="pills">
+            <span>✦ Community First</span>
+            <span>⌁ Transparent</span>
+            <span>🚀 No Fake Promises</span>
+            <span>∞ 100% Vibes</span>
+          </div>
+        </div>
+      </section>
+
+      {/* TOKENOMICS */}
 
       <section className="section" id="tokenomics">
-        <div className="title">
-          <span>THE NUMBERS</span>
+        <div className="sectionTitle">
+          <span className="eyebrow">THE NUMBERS</span>
+
           <h2>Tokenomics</h2>
+
           <p>Preliminary concept allocation.</p>
         </div>
 
-        <div className="tokenGrid">
+        <div className="tokenomicsGrid">
           <div className="donutCard">
             <div className="donut">
-              <div>
+              <div className="donutCenter">
                 <strong>1B</strong>
-                <span>NOVA</span>
+                <span>Total Supply</span>
               </div>
             </div>
           </div>
 
-          <div className="allocation">
-            <Allocation name="Community" value="70%" width="70%" />
-            <Allocation name="Liquidity" value="20%" width="20%" />
-            <Allocation name="Marketing" value="10%" width="10%" />
+          <div className="allocationCard">
+            <div className="allocationRow">
+              <div>
+                <i className="dot purple" />
+                Community
+              </div>
 
-            <p>
-              These allocations are preliminary and should be finalized before
-              any public token launch.
+              <strong>70%</strong>
+            </div>
+
+            <div className="bar">
+              <span style={{ width: "70%" }} />
+            </div>
+
+            <div className="allocationRow">
+              <div>
+                <i className="dot pink" />
+                Liquidity
+              </div>
+
+              <strong>20%</strong>
+            </div>
+
+            <div className="bar">
+              <span style={{ width: "20%" }} />
+            </div>
+
+            <div className="allocationRow">
+              <div>
+                <i className="dot orange" />
+                Marketing
+              </div>
+
+              <strong>10%</strong>
+            </div>
+
+            <div className="bar">
+              <span style={{ width: "10%" }} />
+            </div>
+
+            <p className="smallNote">
+              These are preliminary concept allocations and may be
+              changed before any official launch.
             </p>
           </div>
         </div>
       </section>
 
+      {/* ROADMAP */}
+
       <section className="section" id="roadmap">
-        <div className="title">
-          <span>MISSION CONTROL</span>
+        <div className="sectionTitle">
+          <span className="eyebrow">MISSION CONTROL</span>
+
           <h2>Roadmap</h2>
+
           <p>From ignition to supernova.</p>
         </div>
 
         <div className="roadmap">
-          <Road
-            phase="PHASE 01"
-            title="IGNITION"
-            items={[
-              "Website Launch",
-              "Community Building",
-              "X Launch",
-              "Meme Factory",
-            ]}
-          />
+          <div className="roadCard active">
+            <span className="phase">PHASE 01</span>
 
-          <div className="arrow">»</div>
+            <h3>IGNITION</h3>
 
-          <Road
-            phase="PHASE 02"
-            title="ORBIT"
-            items={[
-              "Token Launch",
-              "DEX Listing",
-              "Community Events",
-              "Creator Campaigns",
-            ]}
-          />
+            <ul>
+              <li>✓ Website Launch</li>
+              <li>✓ Community Building</li>
+              <li>✓ X Launch</li>
+              <li>✓ Meme Factory</li>
+            </ul>
+          </div>
 
-          <div className="arrow">»</div>
+          <div className="roadArrow">»</div>
 
-          <Road
-            phase="PHASE 03"
-            title="SUPERNOVA"
-            items={[
-              "Partnerships",
-              "Ecosystem Expansion",
-              "Community Growth",
-              "Bigger Ideas",
-            ]}
-          />
+          <div className="roadCard blue">
+            <span className="phase">PHASE 02</span>
+
+            <h3>ORBIT</h3>
+
+            <ul>
+              <li>✓ Community Growth</li>
+              <li>✓ Creator Campaigns</li>
+              <li>✓ Community Events</li>
+              <li>✓ Ecosystem Ideas</li>
+            </ul>
+          </div>
+
+          <div className="roadArrow">»</div>
+
+          <div className="roadCard orange">
+            <span className="phase">PHASE 03</span>
+
+            <h3>SUPERNOVA</h3>
+
+            <ul>
+              <li>✓ Partnerships</li>
+              <li>✓ Ecosystem Expansion</li>
+              <li>✓ Community Growth</li>
+              <li>✓ Bigger Ideas</li>
+            </ul>
+          </div>
         </div>
       </section>
 
-      <section className="section" id="faq">
-        <div className="title">
-          <span>QUESTIONS?</span>
+      {/* FAQ */}
+
+      <section className="section faqSection" id="faq">
+        <div className="sectionTitle">
+          <span className="eyebrow">QUESTIONS?</span>
+
           <h2>FAQ</h2>
+
           <p>Your questions, answered.</p>
         </div>
 
-        <div className="faq">
-          {faqs.map((item, index) => (
-            <div className="faqItem" key={item.q}>
-              <button
-                onClick={() =>
-                  setOpenFaq(openFaq === index ? null : index)
-                }
-              >
-                {item.q}
-                <b>{openFaq === index ? "−" : "+"}</b>
-              </button>
+        <div className="faqGrid">
+          <div>
+            {faqs.slice(0, 3).map((faq, index) => (
+              <div className="faqItem" key={faq.q}>
+                <button
+                  onClick={() =>
+                    setOpenFaq(
+                      openFaq === index ? null : index
+                    )
+                  }
+                >
+                  <span>{faq.q}</span>
 
-              {openFaq === index && (
-                <p>{item.a}</p>
-              )}
-            </div>
-          ))}
+                  <b>
+                    {openFaq === index ? "−" : "+"}
+                  </b>
+                </button>
+
+                {openFaq === index && (
+                  <div className="faqAnswer">
+                    {faq.a}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div>
+            {faqs.slice(3).map((faq, index) => {
+              const realIndex = index + 3;
+
+              return (
+                <div className="faqItem" key={faq.q}>
+                  <button
+                    onClick={() =>
+                      setOpenFaq(
+                        openFaq === realIndex
+                          ? null
+                          : realIndex
+                      )
+                    }
+                  >
+                    <span>{faq.q}</span>
+
+                    <b>
+                      {openFaq === realIndex ? "−" : "+"}
+                    </b>
+                  </button>
+
+                  {openFaq === realIndex && (
+                    <div className="faqAnswer">
+                      {faq.a}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </section>
 
-      <section className="section community" id="community">
+      {/* COMMUNITY */}
+
+      <section
+        className="section communitySection"
+        id="community"
+      >
         <div className="communityBox">
-          <div>
-            <span>JOIN THE CREW</span>
+          <div className="communityPlanet" />
+
+          <div className="communityContent">
+            <span className="eyebrow">JOIN THE CREW</span>
 
             <h2>
-              The future is <b>community.</b>
+              The future is <span>community.</span>
             </h2>
 
             <p>
-              Follow NOVA and be there when the countdown reaches zero.
+              Follow NOVA and be there when the countdown reaches
+              zero.
             </p>
 
             <div className="communityButtons">
               <a
-                href={TWITTER}
+                href="https://x.com/NOVAverse12"
                 target="_blank"
                 rel="noreferrer"
+                className="whiteBtn"
               >
                 𝕏 Follow on X
               </a>
 
               <a
-                href={TELEGRAM}
+                href="https://t.me/NOVAFOX18"
                 target="_blank"
                 rel="noreferrer"
+                className="blueBtn"
               >
                 ✈ Join Telegram
               </a>
+
+              <button
+                className="purpleBtn"
+                onClick={() =>
+                  showNotify(
+                    "Discord community coming soon!"
+                  )
+                }
+              >
+                ◈ Join Discord
+              </button>
             </div>
           </div>
-
-          <div className="communityFox">🦊</div>
         </div>
       </section>
 
+      {/* NOTIFY */}
+
       <section className="section notifySection">
         <div>
-          <span>STAY IN ORBIT</span>
-          <h2>Don&apos;t miss NOVA.</h2>
-          <p>Stay connected for launch updates.</p>
+          <span className="eyebrow">STAY IN ORBIT</span>
+
+          <h2>The Future is Community.</h2>
+
+          <p>
+            Don&apos;t miss the launch. Stay connected.
+          </p>
         </div>
 
         {subscribed ? (
@@ -523,59 +834,96 @@ function NovaSite() {
               type="email"
               placeholder="Enter your email..."
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) =>
+                setEmail(e.target.value)
+              }
             />
 
-            <button>Notify Me</button>
+            <button type="submit">
+              🔔 Notify Me
+            </button>
           </form>
         )}
       </section>
 
+      {/* FOOTER */}
+
       <footer>
-        <Logo />
+        <div className="footerInner">
+          <div>
+            <Logo small />
 
-        <p>Born on the internet. Built for the community.</p>
+            <p>
+              Born on the internet. Built for the community.
+            </p>
+          </div>
 
-        <div>
-          <a href={TWITTER} target="_blank" rel="noreferrer">
-            𝕏
-          </a>
+          <div className="footerSocials">
+            <a
+              href="https://x.com/NOVAverse12"
+              target="_blank"
+              rel="noreferrer"
+            >
+              𝕏
+            </a>
 
-          <a href={TELEGRAM} target="_blank" rel="noreferrer">
-            ✈
-          </a>
+            <a
+              href="https://t.me/NOVAFOX18"
+              target="_blank"
+              rel="noreferrer"
+            >
+              ✈
+            </a>
+
+            <a href="#community">◈</a>
+
+            <a href="#home">↗</a>
+          </div>
+
+          <div className="copyright">
+            © 2026 NOVA. Concept website.
+            <br />
+            <span>Built for dreamers. 🚀</span>
+          </div>
         </div>
-
-        <small>© 2026 NOVA. Concept website.</small>
       </footer>
 
       <style jsx global>{`
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap");
+
+        :root {
+          --bg: #020611;
+          --line: rgba(108, 132, 255, 0.24);
+          --text: #f7f8ff;
+          --muted: #a7b1ca;
+        }
+
         * {
           box-sizing: border-box;
+          scroll-behavior: smooth;
         }
 
         html {
-          scroll-behavior: smooth;
-          background: #020611;
+          background: var(--bg);
         }
 
         body {
           margin: 0;
+          color: var(--text);
           background:
             radial-gradient(
               circle at 50% -10%,
-              rgba(100, 40, 255, 0.25),
+              rgba(100, 45, 255, 0.22),
               transparent 35%
             ),
-            #020611;
-          color: white;
-          font-family: Arial, sans-serif;
+            radial-gradient(
+              circle at 100% 40%,
+              rgba(0, 183, 255, 0.1),
+              transparent 30%
+            ),
+            var(--bg);
+          font-family: Inter, Arial, sans-serif;
           overflow-x: hidden;
-        }
-
-        a {
-          color: inherit;
-          text-decoration: none;
         }
 
         button,
@@ -583,31 +931,68 @@ function NovaSite() {
           font: inherit;
         }
 
+        button,
+        a {
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        a {
+          color: inherit;
+          text-decoration: none;
+        }
+
+        .pageGlow {
+          position: fixed;
+          width: 500px;
+          height: 500px;
+          border-radius: 50%;
+          filter: blur(120px);
+          pointer-events: none;
+          z-index: -2;
+        }
+
+        .glowOne {
+          background: rgba(125, 41, 255, 0.14);
+          top: 5%;
+          left: -250px;
+        }
+
+        .glowTwo {
+          background: rgba(0, 178, 255, 0.1);
+          top: 50%;
+          right: -250px;
+        }
+
         .stars {
           position: fixed;
           inset: 0;
-          z-index: -1;
           pointer-events: none;
+          z-index: -1;
+          overflow: hidden;
         }
 
         .stars span {
           position: absolute;
-          width: 2px;
-          height: 2px;
           background: white;
           border-radius: 50%;
-          opacity: 0.5;
-          animation: twinkle 3s infinite;
+          opacity: 0.55;
+          animation: twinkle infinite ease-in-out;
         }
 
         @keyframes twinkle {
+          0%,
+          100% {
+            opacity: 0.15;
+            transform: scale(0.7);
+          }
+
           50% {
-            opacity: 1;
-            transform: scale(1.7);
+            opacity: 0.9;
+            transform: scale(1.5);
           }
         }
 
-        .navbarWrap {
+        .navWrap {
           position: fixed;
           top: 18px;
           left: 0;
@@ -618,16 +1003,17 @@ function NovaSite() {
 
         .navbar {
           max-width: 1180px;
-          min-height: 65px;
           margin: auto;
-          padding: 10px 15px;
+          min-height: 66px;
+          padding: 10px 14px;
           display: flex;
           align-items: center;
           gap: 25px;
-          border: 1px solid rgba(100, 120, 255, 0.3);
+          border: 1px solid rgba(98, 120, 255, 0.28);
           border-radius: 20px;
-          background: rgba(3, 9, 25, 0.85);
-          backdrop-filter: blur(20px);
+          background: rgba(3, 9, 25, 0.78);
+          backdrop-filter: blur(25px);
+          box-shadow: 0 15px 50px rgba(0, 0, 0, 0.35);
         }
 
         .logo {
@@ -636,6 +1022,7 @@ function NovaSite() {
           gap: 10px;
           font-size: 23px;
           font-weight: 900;
+          letter-spacing: 1px;
         }
 
         .logoMark {
@@ -644,24 +1031,48 @@ function NovaSite() {
           display: grid;
           place-items: center;
           border-radius: 12px;
-          background: linear-gradient(135deg, #9b4dff, #24c9ff);
-          box-shadow: 0 0 25px rgba(143, 70, 255, 0.5);
+          background: linear-gradient(
+            135deg,
+            #9b4dff,
+            #24c9ff
+          );
+          box-shadow: 0 0 25px rgba(143, 70, 255, 0.55);
+          color: white;
+          transform: rotate(-8deg);
+        }
+
+        .logoMark span {
+          transform: rotate(8deg);
+        }
+
+        .logoText {
+          background: linear-gradient(
+            90deg,
+            white,
+            #caa4ff,
+            #55dfff
+          );
+          -webkit-background-clip: text;
+          color: transparent;
         }
 
         .navLinks {
-          flex: 1;
           display: flex;
+          align-items: center;
           justify-content: center;
           gap: 25px;
+          flex: 1;
         }
 
         .navLinks a {
-          color: #aeb9d4;
           font-size: 13px;
+          color: #bac3da;
+          transition: 0.2s;
         }
 
         .navLinks a:hover {
           color: white;
+          text-shadow: 0 0 18px #9c4cff;
         }
 
         .navRight {
@@ -670,219 +1081,255 @@ function NovaSite() {
           gap: 8px;
         }
 
-        .social {
+        .socialMini,
+        .themeBtn {
           width: 36px;
           height: 36px;
           display: grid;
           place-items: center;
           border-radius: 50%;
-          border: 1px solid rgba(255, 255, 255, 0.15);
+          color: #d8def0;
           background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          cursor: pointer;
         }
 
         .walletBtn {
           border: 0;
-          padding: 12px 18px;
-          border-radius: 30px;
           color: white;
           font-size: 12px;
           font-weight: 800;
+          padding: 12px 19px;
+          border-radius: 30px;
           cursor: pointer;
-          background: linear-gradient(90deg, #27cfff, #9b43ff);
-          box-shadow: 0 0 25px rgba(120, 70, 255, 0.4);
+          background: linear-gradient(
+            90deg,
+            #26cfff,
+            #9b43ff
+          );
+          box-shadow: 0 0 28px rgba(130, 65, 255, 0.38);
+          transition: 0.2s;
+          min-width: 130px;
         }
 
-        .walletArea {
-          position: relative;
-        }
-
-        .walletInfo {
-          position: absolute;
-          top: 52px;
-          right: 0;
-          width: 240px;
-          padding: 15px;
-          border: 1px solid rgba(100, 130, 255, 0.3);
-          border-radius: 15px;
-          background: rgba(4, 10, 28, 0.97);
-          box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
-        }
-
-        .walletInfo div {
-          display: flex;
-          justify-content: space-between;
-          gap: 15px;
-          margin-bottom: 8px;
-        }
-
-        .walletInfo div:last-child {
-          margin-bottom: 0;
-        }
-
-        .walletInfo span {
-          color: #71809d;
-          font-size: 10px;
-        }
-
-        .walletInfo strong {
-          color: #dce3f5;
-          font-size: 10px;
-        }
-
-        .walletMessage {
-          position: absolute;
-          top: 55px;
-          right: 0;
-          white-space: nowrap;
-          color: #92a0bd;
-          font-size: 10px;
+        .walletBtn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 0 35px rgba(120, 75, 255, 0.65);
         }
 
         .hamburger {
           display: none;
           border: 0;
-          background: transparent;
           color: white;
-          font-size: 25px;
+          background: transparent;
+          font-size: 26px;
+          cursor: pointer;
         }
 
         .section {
           width: min(1160px, calc(100% - 40px));
           margin: auto;
-          padding: 110px 0;
+          padding: 105px 0;
+          position: relative;
         }
 
         .hero {
-          min-height: 850px;
+          min-height: 830px;
           padding-top: 170px;
           display: grid;
           grid-template-columns: 0.9fr 1.1fr;
           align-items: center;
+          gap: 10px;
         }
 
-        .badge {
+        .launchBadge {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
+          gap: 9px;
           padding: 8px 15px;
-          border-radius: 30px;
-          border: 1px solid rgba(100, 130, 255, 0.35);
-          color: #cbd5f5;
+          border: 1px solid rgba(106, 128, 255, 0.4);
+          border-radius: 999px;
+          background: rgba(20, 31, 70, 0.48);
+          color: #cfd7ff;
           font-size: 11px;
           font-weight: 800;
+          letter-spacing: 1px;
         }
 
-        .badge span {
+        .pulseDot {
           width: 7px;
           height: 7px;
           border-radius: 50%;
-          background: #3fd7ff;
-          box-shadow: 0 0 15px #3fd7ff;
+          background: #40d5ff;
+          box-shadow: 0 0 12px #40d5ff;
+          animation: pulse 1.4s infinite;
+        }
+
+        @keyframes pulse {
+          50% {
+            transform: scale(1.8);
+            opacity: 0.5;
+          }
         }
 
         .hero h1 {
-          margin: 20px 0;
-          font-size: clamp(75px, 10vw, 135px);
+          margin: 22px 0 0;
+          font-size: clamp(75px, 10vw, 138px);
           line-height: 0.9;
           letter-spacing: -8px;
-          background: linear-gradient(#fff, #eee, #8e4bff);
+          font-weight: 900;
+          background: linear-gradient(
+            180deg,
+            #fff 10%,
+            #e9e7ff 40%,
+            #9551ff 100%
+          );
           -webkit-background-clip: text;
           color: transparent;
+          filter: drop-shadow(
+            0 0 30px rgba(145, 70, 255, 0.4)
+          );
         }
 
-        .hero h1 span {
-          background: linear-gradient(90deg, #a14bff, #35caff);
-          -webkit-background-clip: text;
-          color: transparent;
+        .dollar {
+          color: white;
+          -webkit-text-fill-color: white;
         }
 
         .hero h2 {
-          font-size: clamp(23px, 3vw, 37px);
+          margin: 18px 0 15px;
+          font-size: clamp(23px, 3vw, 38px);
+          line-height: 1;
+          font-weight: 900;
         }
 
-        .hero h2 b {
-          background: linear-gradient(90deg, #a44dff, #38caff);
+        .hero h2 span,
+        .sectionTitle h2 span,
+        .aboutText h2 span,
+        .communityContent h2 span {
+          background: linear-gradient(
+            90deg,
+            #a348ff,
+            #38ccff
+          );
           -webkit-background-clip: text;
           color: transparent;
         }
 
-        .heroText > p {
-          color: #9aa7c2;
+        .heroText {
+          color: var(--muted);
           line-height: 1.8;
+          font-size: 15px;
         }
 
         .countdown {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          gap: 8px;
-          max-width: 430px;
+          gap: 10px;
           margin: 30px 0;
+          max-width: 430px;
         }
 
         .countdown div {
-          padding: 13px 5px;
-          text-align: center;
-          border: 1px solid rgba(110, 135, 255, 0.25);
-          border-radius: 12px;
-          background: rgba(8, 18, 42, 0.75);
+          min-height: 76px;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid rgba(111, 134, 255, 0.28);
+          background: rgba(8, 18, 42, 0.7);
+          border-radius: 11px;
         }
 
         .countdown strong {
-          display: block;
-          font-size: 23px;
+          font-size: 22px;
         }
 
         .countdown small {
-          color: #7e8ba8;
+          margin-top: 4px;
           font-size: 8px;
+          color: #8d9bb9;
+          letter-spacing: 1px;
         }
 
-        .buttons {
+        .heroButtons {
           display: flex;
-          gap: 10px;
+          gap: 12px;
         }
 
-        .primary,
-        .secondary {
+        .primaryBtn,
+        .secondaryBtn {
           min-height: 48px;
-          padding: 0 24px;
+          padding: 0 25px;
           border-radius: 30px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          font-size: 11px;
-          font-weight: 900;
+          gap: 15px;
           cursor: pointer;
+          font-weight: 900;
+          font-size: 12px;
         }
 
-        .primary {
-          border: 0;
+        .primaryBtn {
           color: white;
-          background: linear-gradient(90deg, #27cfff, #9b43ff);
-          box-shadow: 0 0 25px rgba(120, 70, 255, 0.4);
+          border: 0;
+          background: linear-gradient(
+            90deg,
+            #27cfff,
+            #a643ff
+          );
+          box-shadow: 0 0 25px rgba(100, 80, 255, 0.45);
         }
 
-        .secondary {
-          border: 1px solid rgba(110, 135, 255, 0.35);
-          background: rgba(5, 12, 30, 0.7);
+        .secondaryBtn {
+          border: 1px solid rgba(110, 131, 255, 0.4);
+          background: rgba(3, 10, 28, 0.7);
+          color: white;
         }
 
-        .communityLinks {
+        .communityRow {
+          margin-top: 25px;
           display: flex;
           align-items: center;
           gap: 10px;
-          margin-top: 25px;
-          color: #7f8ca8;
+          color: #8e9bb7;
           font-size: 11px;
         }
 
-        .communityLinks a {
-          width: 30px;
-          height: 30px;
+        .communityRow a {
+          width: 31px;
+          height: 31px;
+          border-radius: 50%;
           display: grid;
           place-items: center;
-          border-radius: 50%;
-          border: 1px solid rgba(120, 140, 255, 0.3);
+          border: 1px solid rgba(150, 150, 255, 0.35);
+          background: rgba(255, 255, 255, 0.03);
+        }
+
+        .connectedBox {
+          margin-top: 18px;
+          max-width: 430px;
+          padding: 12px 15px;
+          border-radius: 12px;
+          border: 1px solid rgba(54, 213, 255, 0.25);
+          background: rgba(20, 120, 160, 0.08);
+        }
+
+        .connectedBox span {
+          display: block;
+          font-size: 8px;
+          color: #41d5ff;
+          letter-spacing: 2px;
+          margin-bottom: 5px;
+        }
+
+        .connectedBox strong {
+          display: block;
+          font-size: 10px;
+          word-break: break-all;
+          color: #c7d4f5;
         }
 
         .heroVisual {
@@ -893,160 +1340,594 @@ function NovaSite() {
         }
 
         .planet {
-          width: 470px;
-          height: 470px;
-          border-radius: 50%;
-          background:
-            radial-gradient(circle at 30% 30%, #55e0ff, #174a9e 25%, #08123a 60%, #01030e 72%);
-          box-shadow: 0 0 90px rgba(50, 150, 255, 0.25);
-        }
-
-        .orbit {
           position: absolute;
-          width: 570px;
-          height: 180px;
-          border: 1px solid rgba(130, 80, 255, 0.45);
           border-radius: 50%;
         }
 
-        .orbit1 {
-          transform: rotate(-20deg);
+        .planetMain {
+          width: 480px;
+          height: 480px;
+          right: -20px;
+          top: 80px;
+          background:
+            radial-gradient(
+              circle at 35% 30%,
+              #55e0ff 0%,
+              #174a9e 25%,
+              #08123a 60%,
+              #01030e 72%
+            );
+          box-shadow:
+            inset -50px -40px 100px #01020b,
+            0 0 70px rgba(50, 150, 255, 0.3);
         }
 
-        .orbit2 {
+        .planetSmall {
+          width: 75px;
+          height: 75px;
+          right: 5px;
+          top: 10px;
+          background: radial-gradient(
+            circle at 30% 30%,
+            #b7a7c8,
+            #24243e
+          );
+        }
+
+        .orbitRing {
+          position: absolute;
+          width: 560px;
+          height: 170px;
+          border: 1px solid rgba(118, 88, 255, 0.4);
+          border-radius: 50%;
+          transform: rotate(-16deg);
+        }
+
+        .ringTwo {
           transform: rotate(20deg);
-          border-color: rgba(40, 200, 255, 0.3);
+          border-color: rgba(45, 197, 255, 0.25);
+        }
+
+        .comet {
+          position: absolute;
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: white;
+          box-shadow: 0 0 20px 6px #6d6bff;
+        }
+
+        .comet::before {
+          content: "";
+          position: absolute;
+          width: 100px;
+          height: 2px;
+          right: 5px;
+          top: 4px;
+          background: linear-gradient(
+            90deg,
+            transparent,
+            #a45cff
+          );
+          transform: rotate(-25deg);
+          transform-origin: right;
+        }
+
+        .cometOne {
+          left: 10%;
+          top: 15%;
+        }
+
+        .cometTwo {
+          right: 10%;
+          top: 50%;
         }
 
         .fox {
           position: absolute;
           z-index: 5;
-          font-size: 220px;
-          filter: drop-shadow(0 0 35px rgba(170, 70, 255, 0.7));
-          animation: float 4s ease-in-out infinite;
+          top: 65px;
+          left: 23%;
+          width: 270px;
+          height: 400px;
+          animation: float 5s ease-in-out infinite;
+          filter: drop-shadow(
+            0 25px 30px rgba(0, 0, 0, 0.6)
+          );
         }
 
         @keyframes float {
-          50% {
-            transform: translateY(-18px);
+          0%,
+          100% {
+            transform: translateY(0) rotate(-1deg);
           }
+
+          50% {
+            transform: translateY(-17px) rotate(1deg);
+          }
+        }
+
+        .foxGlow {
+          position: absolute;
+          inset: 50px 10px;
+          background: rgba(152, 65, 255, 0.35);
+          filter: blur(70px);
+          z-index: -1;
+        }
+
+        .helmet {
+          width: 250px;
+          height: 250px;
+          position: relative;
+          margin: auto;
+          border-radius: 48%;
+          background: linear-gradient(
+            135deg,
+            #7e83a9,
+            #202544 55%,
+            #0c1027
+          );
+          border: 8px solid #aab4e4;
+          box-shadow:
+            inset 0 0 30px #000,
+            0 0 35px rgba(91, 64, 255, 0.55);
+        }
+
+        .visor {
+          position: absolute;
+          inset: 28px;
+          border-radius: 45%;
+          overflow: hidden;
+          background: linear-gradient(
+            135deg,
+            #191b3d,
+            #02040d
+          );
+          border: 6px solid #59618d;
+          box-shadow: inset 0 0 40px rgba(69, 58, 255, 0.45);
+        }
+
+        .visorReflection {
+          position: absolute;
+          width: 100px;
+          height: 20px;
+          top: 35px;
+          left: 25px;
+          transform: rotate(-30deg);
+          background: rgba(255, 255, 255, 0.14);
+          filter: blur(5px);
+        }
+
+        .face {
+          position: absolute;
+          inset: 50px 32px 25px;
+          border-radius: 45%;
+          background: linear-gradient(
+            145deg,
+            #ffac3b,
+            #c65c1d 55%,
+            #873416
+          );
+        }
+
+        .face::before,
+        .face::after {
+          content: "";
+          position: absolute;
+          top: -22px;
+          width: 55px;
+          height: 55px;
+          background: #e47a23;
+          clip-path: polygon(
+            50% 0,
+            100% 100%,
+            0 100%
+          );
+        }
+
+        .face::before {
+          left: 8px;
+        }
+
+        .face::after {
+          right: 8px;
+        }
+
+        .eye {
+          position: absolute;
+          width: 34px;
+          height: 15px;
+          background: #070812;
+          top: 65px;
+          border-radius: 50%;
+        }
+
+        .eyeL {
+          left: 18px;
+          transform: rotate(10deg);
+        }
+
+        .eyeR {
+          right: 18px;
+          transform: rotate(-10deg);
+        }
+
+        .nose {
+          position: absolute;
+          left: 50%;
+          top: 94px;
+          transform: translateX(-50%);
+          width: 17px;
+          height: 13px;
+          border-radius: 50%;
+          background: #111;
+        }
+
+        .mouth {
+          position: absolute;
+          top: 106px;
+          left: 50%;
+          transform: translateX(-50%);
+          font-size: 28px;
+          color: #111;
+        }
+
+        .helmetBand {
+          position: absolute;
+          bottom: -16px;
+          left: 50%;
+          transform: translateX(-50%);
+          padding: 5px 25px;
+          border-radius: 30px;
+          background: #181d43;
+          border: 1px solid #6873a7;
+          font-size: 11px;
+          font-weight: 900;
+          letter-spacing: 3px;
+        }
+
+        .ear {
+          position: absolute;
+          top: -30px;
+          color: #e88836;
+          font-size: 55px;
+          z-index: -1;
+        }
+
+        .leftEar {
+          left: 20px;
+          transform: rotate(-25deg);
+        }
+
+        .rightEar {
+          right: 20px;
+          transform: rotate(25deg);
+        }
+
+        .spaceBody {
+          width: 180px;
+          height: 155px;
+          margin: -3px auto 0;
+          border-radius: 50px 50px 25px 25px;
+          background: linear-gradient(
+            145deg,
+            #252a4c,
+            #090c1e
+          );
+          border: 5px solid #575f8d;
+          position: relative;
+        }
+
+        .chest {
+          width: 50px;
+          height: 50px;
+          display: grid;
+          place-items: center;
+          position: absolute;
+          left: 50%;
+          top: 35px;
+          transform: translateX(-50%);
+          border-radius: 12px;
+          color: #a95cff;
+          border: 1px solid #7181ff;
+          background: #080c21;
+        }
+
+        .arm {
+          width: 60px;
+          height: 115px;
+          position: absolute;
+          top: 15px;
+          border-radius: 30px;
+          background: linear-gradient(
+            #31365b,
+            #0b0e20
+          );
+          border: 5px solid #515a87;
+        }
+
+        .armL {
+          left: -55px;
+          transform: rotate(25deg);
+        }
+
+        .armR {
+          right: -55px;
+          transform: rotate(-25deg);
         }
 
         .rocket {
           position: absolute;
           right: 10%;
-          top: 5%;
-          font-size: 65px;
-          animation: rocket 3s infinite ease-in-out;
+          top: 0;
+          font-size: 70px;
+          transform: rotate(-20deg);
+          filter: drop-shadow(
+            0 0 25px #a24fff
+          );
+          animation: rocketFloat 3s ease-in-out infinite;
         }
 
-        @keyframes rocket {
+        @keyframes rocketFloat {
           50% {
-            transform: translateY(-15px) rotate(-10deg);
+            transform: translateY(-15px) rotate(-20deg);
           }
         }
 
-        .quote {
+        .heroQuote {
           position: absolute;
           right: 0;
-          bottom: 30px;
+          bottom: 60px;
           width: 290px;
-          padding: 15px;
-          border: 1px solid rgba(100, 130, 255, 0.3);
+          padding: 16px;
+          border: 1px solid rgba(88, 125, 255, 0.4);
           border-radius: 15px;
-          background: rgba(4, 13, 31, 0.8);
-          color: #c9d1e6;
+          background: rgba(4, 13, 31, 0.75);
+          backdrop-filter: blur(15px);
+          color: #d7def3;
           font-size: 11px;
           line-height: 1.6;
         }
 
-        .quote b {
-          display: block;
-          color: #ffb23d;
+        .heroQuote span {
+          color: #ffc34d;
+          margin-right: 6px;
         }
 
-        .title {
+        .heroQuote b {
+          display: block;
+          color: #ffb13c;
+        }
+
+        .sectionHeader,
+        .sectionTitle {
           margin-bottom: 35px;
         }
 
-        .title > span {
-          color: #8996b5;
+        .eyebrow {
           font-size: 10px;
           font-weight: 900;
           letter-spacing: 3px;
+          color: #8795bb;
         }
 
-        .title h2 {
-          font-size: 45px;
-          margin: 8px 0;
+        .sectionHeader h2,
+        .sectionTitle h2,
+        .aboutText h2,
+        .communityContent h2 {
+          margin: 7px 0;
+          font-size: clamp(32px, 5vw, 48px);
+          line-height: 1;
+          letter-spacing: -2px;
         }
 
-        .title h2 b {
-          background: linear-gradient(90deg, #a34cff, #35caff);
-          -webkit-background-clip: text;
-          color: transparent;
+        .sectionHeader p,
+        .sectionTitle p,
+        .communityContent p {
+          color: var(--muted);
         }
 
-        .title p {
-          color: #8996b5;
-        }
-
-        .aboutGrid,
-        .tokenGrid {
+        .overviewGrid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
+          grid-template-columns: repeat(4, 1fr) 1.5fr;
+          gap: 12px;
         }
 
-        .aboutCard,
+        .statCard,
+        .priceCard,
         .donutCard,
-        .allocation {
-          min-height: 350px;
-          padding: 30px;
-          border: 1px solid rgba(100, 125, 255, 0.25);
-          border-radius: 20px;
-          background: rgba(6, 16, 37, 0.75);
+        .allocationCard {
+          min-height: 190px;
+          padding: 20px;
+          border: 1px solid var(--line);
+          border-radius: 18px;
+          background: linear-gradient(
+            145deg,
+            rgba(8, 20, 47, 0.88),
+            rgba(2, 9, 25, 0.85)
+          );
         }
 
-        .aboutCard {
+        .statCard {
+          text-align: left;
+          cursor: default;
+        }
+
+        button.statCard {
+          color: white;
+          font: inherit;
+        }
+
+        .contractCard {
+          cursor: pointer !important;
+          transition: 0.2s;
+        }
+
+        .contractCard:hover {
+          transform: translateY(-4px);
+          border-color: #8655ff;
+        }
+
+        .statIcon {
+          width: 42px;
+          height: 42px;
+          display: grid;
+          place-items: center;
+          border-radius: 12px;
+          background: rgba(119, 74, 255, 0.13);
+          color: #8f75ff;
+          font-size: 21px;
+          margin-bottom: 22px;
+        }
+
+        .statCard small {
+          display: block;
+          color: #8996b2;
+          font-size: 10px;
+          margin-bottom: 7px;
+        }
+
+        .statCard strong {
+          display: block;
+          font-size: 17px;
+        }
+
+        .statCard > span {
+          display: block;
+          color: #75839f;
+          font-size: 9px;
+          margin-top: 5px;
+        }
+
+        .priceCard {
+          overflow: hidden;
+          position: relative;
+        }
+
+        .priceTop {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .priceTop b {
+          font-size: 30px;
+        }
+
+        .fakeChart {
+          height: 100px;
+          margin: 12px -20px 5px;
+        }
+
+        .fakeChart svg {
+          width: 100%;
+          height: 100%;
+        }
+
+        .aboutSection {
+          display: grid;
+          grid-template-columns: 1fr 1.15fr;
+          gap: 50px;
+          align-items: center;
+        }
+
+        .aboutVisual {
+          height: 350px;
+          border-radius: 22px;
+          border: 1px solid var(--line);
+          overflow: hidden;
+          position: relative;
           display: grid;
           place-items: center;
           background:
-            radial-gradient(circle, rgba(100, 60, 255, 0.3), transparent 45%),
-            rgba(6, 16, 37, 0.75);
+            radial-gradient(
+              circle at 60% 50%,
+              rgba(103, 67, 255, 0.55),
+              transparent 25%
+            ),
+            linear-gradient(
+              135deg,
+              #050d25,
+              #030717
+            );
         }
 
-        .bigFox {
-          font-size: 160px;
-          filter: drop-shadow(0 0 35px rgba(150, 70, 255, 0.7));
+        .miniPlanet {
+          position: absolute;
+          width: 300px;
+          height: 300px;
+          border-radius: 50%;
+          background: radial-gradient(
+            circle at 30% 30%,
+            #36cfff,
+            #102a6a 35%,
+            #020817 70%
+          );
         }
 
-        .aboutContent {
-          padding: 25px;
+        .aboutFox {
+          position: relative;
+          z-index: 2;
+          font-size: 150px;
+          filter: drop-shadow(
+            0 0 35px rgba(160, 70, 255, 0.7)
+          );
+          animation: float 4s ease-in-out infinite;
         }
 
-        .aboutContent h3 {
-          font-size: 25px;
+        .playButton {
+          position: absolute;
+          z-index: 3;
+          width: 65px;
+          height: 65px;
+          display: grid;
+          place-items: center;
+          border-radius: 50%;
+          color: white;
+          background: linear-gradient(
+            135deg,
+            #25caff,
+            #9348ff
+          );
+          box-shadow: 0 0 30px rgba(132, 69, 255, 0.65);
+          cursor: pointer;
         }
 
-        .aboutContent p {
-          color: #96a2bd;
+        .aboutText h3 {
+          font-size: 20px;
+        }
+
+        .aboutText p {
+          color: #9aa6c0;
           line-height: 1.8;
+          max-width: 650px;
         }
 
         .pills {
           display: flex;
           flex-wrap: wrap;
-          gap: 8px;
-          margin-top: 25px;
+          gap: 9px;
+          margin-top: 22px;
         }
 
         .pills span {
-          padding: 9px 12px;
-          border: 1px solid rgba(100, 125, 255, 0.25);
-          border-radius: 20px;
-          color: #b8c3dc;
+          padding: 8px 12px;
+          border-radius: 30px;
+          border: 1px solid rgba(111, 133, 255, 0.25);
+          color: #b9c4de;
           font-size: 10px;
+          background: rgba(255, 255, 255, 0.025);
+        }
+
+        .tokenomicsGrid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 15px;
+        }
+
+        .donutCard,
+        .allocationCard {
+          min-height: 400px;
         }
 
         .donutCard {
@@ -1055,53 +1936,85 @@ function NovaSite() {
         }
 
         .donut {
-          width: 260px;
-          height: 260px;
-          display: grid;
-          place-items: center;
+          width: 270px;
+          height: 270px;
           border-radius: 50%;
           background: conic-gradient(
             #8d45ff 0 70%,
             #d557bc 70% 90%,
             #ff9b36 90% 100%
           );
-        }
-
-        .donut > div {
-          width: 175px;
-          height: 175px;
           display: grid;
           place-items: center;
-          align-content: center;
+        }
+
+        .donut::before {
+          content: "";
+          position: absolute;
+          width: 190px;
+          height: 190px;
           border-radius: 50%;
           background: #061026;
         }
 
-        .donut strong {
-          font-size: 40px;
+        .donutCenter {
+          position: relative;
+          z-index: 2;
+          text-align: center;
         }
 
-        .donut span {
-          color: #7d8aa6;
+        .donutCenter strong {
+          display: block;
+          font-size: 43px;
+        }
+
+        .donutCenter span {
+          color: #8995b0;
           font-size: 10px;
         }
 
-        .allocation {
+        .allocationCard {
           display: flex;
           flex-direction: column;
           justify-content: center;
-          gap: 8px;
+          gap: 10px;
         }
 
         .allocationRow {
           display: flex;
           justify-content: space-between;
-          margin-top: 10px;
+          align-items: center;
+          color: #d8def0;
+        }
+
+        .allocationRow div {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+        }
+
+        .dot {
+          width: 10px;
+          height: 10px;
+          display: inline-block;
+          border-radius: 50%;
+        }
+
+        .purple {
+          background: #8d45ff;
+        }
+
+        .pink {
+          background: #d557bc;
+        }
+
+        .orange {
+          background: #ff9b36;
         }
 
         .bar {
           height: 7px;
-          margin-bottom: 10px;
+          margin-bottom: 14px;
           border-radius: 10px;
           background: rgba(255, 255, 255, 0.06);
           overflow: hidden;
@@ -1110,244 +2023,335 @@ function NovaSite() {
         .bar span {
           display: block;
           height: 100%;
-          background: linear-gradient(90deg, #8d45ff, #35caff);
+          border-radius: inherit;
+          background: linear-gradient(
+            90deg,
+            #8644ff,
+            #36c9ff
+          );
         }
 
-        .allocation p {
-          color: #697792;
+        .smallNote {
+          color: #6f7c99;
           font-size: 10px;
           line-height: 1.7;
+          margin-top: 10px;
         }
 
         .roadmap {
           display: grid;
           grid-template-columns: 1fr auto 1fr auto 1fr;
+          gap: 12px;
           align-items: center;
-          gap: 10px;
         }
 
         .roadCard {
-          min-height: 260px;
-          padding: 25px;
-          border: 1px solid rgba(140, 70, 255, 0.35);
+          min-height: 280px;
+          padding: 27px;
           border-radius: 18px;
-          background: rgba(40, 15, 70, 0.4);
+          border: 1px solid rgba(142, 72, 255, 0.4);
+          background: linear-gradient(
+            145deg,
+            rgba(55, 25, 94, 0.5),
+            rgba(4, 12, 30, 0.9)
+          );
         }
 
-        .roadCard h3 {
-          margin: 10px 0 25px;
+        .roadCard.blue {
+          border-color: rgba(41, 196, 255, 0.35);
         }
 
-        .roadCard li {
-          margin: 12px 0;
-          color: #b3bdd4;
-          font-size: 11px;
+        .roadCard.orange {
+          border-color: rgba(255, 159, 58, 0.35);
         }
 
         .phase {
-          color: #a875ff;
           font-size: 9px;
           font-weight: 900;
+          color: #9f72ff;
           letter-spacing: 2px;
         }
 
-        .arrow {
-          font-size: 30px;
-          color: #687492;
+        .roadCard.blue .phase {
+          color: #3bd1ff;
         }
 
-        .faq {
+        .roadCard.orange .phase {
+          color: #ffab42;
+        }
+
+        .roadCard h3 {
+          font-size: 23px;
+          margin: 7px 0 25px;
+        }
+
+        .roadCard ul {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+          display: grid;
+          gap: 14px;
+          color: #b7c1d7;
+          font-size: 11px;
+        }
+
+        .roadArrow {
+          font-size: 30px;
+          color: #677392;
+        }
+
+        .faqGrid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 10px;
+          gap: 13px;
         }
 
         .faqItem {
-          border: 1px solid rgba(100, 125, 255, 0.22);
+          margin-bottom: 10px;
+          border: 1px solid rgba(110, 131, 255, 0.22);
           border-radius: 13px;
-          background: rgba(6, 16, 37, 0.65);
           overflow: hidden;
+          background: rgba(6, 16, 37, 0.65);
         }
 
         .faqItem button {
           width: 100%;
-          padding: 18px;
+          padding: 17px;
           display: flex;
           justify-content: space-between;
+          gap: 15px;
           border: 0;
           background: transparent;
-          color: white;
-          cursor: pointer;
+          color: #e8ecf8;
           text-align: left;
+          cursor: pointer;
           font-size: 11px;
         }
 
         .faqItem button b {
-          color: #9c69ff;
+          color: #9471ff;
           font-size: 18px;
         }
 
-        .faqItem p {
-          padding: 0 18px 18px;
-          color: #8996b2;
-          font-size: 11px;
+        .faqAnswer {
+          padding: 0 17px 17px;
+          color: #8e9ab5;
           line-height: 1.7;
+          font-size: 11px;
         }
 
         .communityBox {
-          min-height: 320px;
+          min-height: 330px;
           padding: 50px;
-          position: relative;
-          overflow: hidden;
-          border: 1px solid rgba(100, 125, 255, 0.3);
           border-radius: 25px;
+          border: 1px solid rgba(96, 130, 255, 0.32);
+          overflow: hidden;
+          position: relative;
           background:
-            radial-gradient(circle at 80%, rgba(70, 120, 255, 0.3), transparent 35%),
-            rgba(8, 20, 48, 0.8);
+            radial-gradient(
+              circle at 85% 50%,
+              rgba(59, 116, 255, 0.32),
+              transparent 30%
+            ),
+            linear-gradient(
+              135deg,
+              rgba(8, 24, 57, 0.9),
+              rgba(24, 8, 58, 0.8)
+            );
         }
 
-        .communityBox > div:first-child {
+        .communityPlanet {
+          position: absolute;
+          width: 270px;
+          height: 270px;
+          border-radius: 50%;
+          right: 50px;
+          top: 30px;
+          background: radial-gradient(
+            circle at 30% 30%,
+            #43caff,
+            #18366e 35%,
+            #040b20 70%
+          );
+          opacity: 0.85;
+        }
+
+        .communityContent {
           position: relative;
           z-index: 2;
+          max-width: 650px;
         }
 
-        .communityBox span {
-          color: #8b98b5;
-          font-size: 10px;
-          font-weight: 900;
-          letter-spacing: 3px;
-        }
-
-        .communityBox h2 {
-          font-size: 43px;
-        }
-
-        .communityBox h2 b {
-          color: #3bcaff;
-        }
-
-        .communityBox p {
-          color: #96a3bf;
+        .communityContent h2 {
+          max-width: 550px;
         }
 
         .communityButtons {
           display: flex;
+          flex-wrap: wrap;
           gap: 10px;
           margin-top: 25px;
         }
 
-        .communityButtons a {
+        .communityButtons a,
+        .communityButtons button {
           padding: 13px 20px;
           border-radius: 12px;
-          background: white;
-          color: #050817;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          cursor: pointer;
           font-size: 11px;
-          font-weight: 900;
+          font-weight: 800;
         }
 
-        .communityButtons a + a {
+        .whiteBtn {
+          background: white;
+          color: #090b18;
+        }
+
+        .blueBtn {
           background: #27aef1;
           color: white;
         }
 
-        .communityFox {
-          position: absolute;
-          right: 10%;
-          top: 35px;
-          font-size: 210px;
-          filter: drop-shadow(0 0 35px rgba(120, 70, 255, 0.6));
+        .purpleBtn {
+          background: linear-gradient(
+            90deg,
+            #7137ff,
+            #a747ff
+          );
+          color: white;
         }
 
         .notifySection {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 30px;
-          padding: 30px;
-          border: 1px solid rgba(100, 125, 255, 0.25);
+          padding: 32px;
+          border: 1px solid rgba(102, 127, 255, 0.3);
           border-radius: 20px;
-          background: rgba(7, 18, 42, 0.75);
-        }
-
-        .notifySection > div > span {
-          color: #8996b5;
-          font-size: 10px;
-          letter-spacing: 3px;
-          font-weight: 900;
+          background:
+            radial-gradient(
+              circle at 70% 20%,
+              rgba(127, 54, 255, 0.2),
+              transparent 35%
+            ),
+            linear-gradient(
+              90deg,
+              rgba(6, 19, 43, 0.9),
+              rgba(29, 9, 51, 0.8)
+            );
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 25px;
         }
 
         .notifySection h2 {
-          margin: 7px 0;
+          margin: 5px 0;
+          font-size: 25px;
         }
 
         .notifySection p {
-          color: #7886a3;
-          font-size: 11px;
+          color: #8996b2;
+          font-size: 12px;
+          margin: 0;
         }
 
         .notifySection form {
           min-width: 400px;
           display: flex;
           padding: 5px;
-          border: 1px solid rgba(110, 130, 255, 0.25);
+          border: 1px solid rgba(120, 139, 255, 0.25);
           border-radius: 40px;
+          background: rgba(0, 0, 0, 0.2);
         }
 
         .notifySection input {
-          flex: 1;
           min-width: 0;
-          padding: 12px 15px;
+          flex: 1;
+          padding: 12px 16px;
           border: 0;
           outline: 0;
           background: transparent;
           color: white;
+          font-size: 11px;
         }
 
         .notifySection button {
           border: 0;
           padding: 0 20px;
           border-radius: 30px;
+          background: linear-gradient(
+            90deg,
+            #27cfff,
+            #9b43ff
+          );
           color: white;
-          background: linear-gradient(90deg, #27cfff, #9b43ff);
+          font-size: 11px;
+          font-weight: 900;
           cursor: pointer;
         }
 
         .subscribed {
-          padding: 14px 20px;
+          padding: 15px 22px;
           border-radius: 30px;
-          background: rgba(120, 70, 255, 0.2);
+          background: rgba(100, 65, 255, 0.18);
+          border: 1px solid rgba(150, 90, 255, 0.35);
+          font-size: 12px;
         }
 
         footer {
-          padding: 40px 20px;
-          text-align: center;
-          border-top: 1px solid rgba(100, 125, 255, 0.15);
+          border-top: 1px solid rgba(100, 120, 255, 0.15);
+          margin-top: 50px;
         }
 
-        footer .logo {
-          justify-content: center;
+        .footerInner {
+          width: min(1160px, calc(100% - 40px));
+          margin: auto;
+          padding: 35px 0;
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          align-items: center;
+          gap: 25px;
         }
 
-        footer p,
-        footer small {
-          color: #697792;
+        .logoSmall .logoMark {
+          width: 32px;
+          height: 32px;
+          font-size: 13px;
+        }
+
+        .logoSmall {
+          font-size: 18px;
+        }
+
+        .footerInner p {
+          color: #697791;
           font-size: 10px;
+          margin: 8px 0 0;
         }
 
-        footer > div:last-of-type {
+        .footerSocials {
           display: flex;
-          justify-content: center;
-          gap: 10px;
-          margin: 20px 0;
+          gap: 9px;
         }
 
-        footer a {
-          width: 36px;
-          height: 36px;
+        .footerSocials a {
+          width: 37px;
+          height: 37px;
           display: grid;
           place-items: center;
-          border: 1px solid rgba(120, 140, 190, 0.3);
           border-radius: 50%;
+          border: 1px solid rgba(130, 140, 190, 0.3);
+          background: rgba(255, 255, 255, 0.025);
+        }
+
+        .copyright {
+          text-align: right;
+          color: #697791;
+          font-size: 9px;
+          line-height: 1.8;
+        }
+
+        .copyright span {
+          color: #909bb3;
         }
 
         .toast {
@@ -1357,37 +2361,160 @@ function NovaSite() {
           transform: translateX(-50%);
           z-index: 999;
           padding: 13px 20px;
-          border: 1px solid rgba(120, 90, 255, 0.5);
           border-radius: 30px;
-          background: rgba(10, 18, 40, 0.95);
+          background: rgba(11, 18, 42, 0.94);
+          border: 1px solid rgba(116, 91, 255, 0.55);
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
           font-size: 11px;
         }
 
-        @media (max-width: 900px) {
-          .hero,
-          .aboutGrid,
-          .tokenGrid {
+        @media (max-width: 1000px) {
+          .navLinks {
+            gap: 14px;
+          }
+
+          .overviewGrid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+
+          .priceCard {
+            grid-column: span 2;
+          }
+
+          .hero {
             grid-template-columns: 1fr;
           }
 
           .heroVisual {
-            margin-top: 30px;
+            margin-top: 20px;
+          }
+        }
+
+        @media (max-width: 760px) {
+          .navWrap {
+            padding: 0 10px;
+          }
+
+          .navbar {
+            border-radius: 16px;
+          }
+
+          .navLinks {
+            position: absolute;
+            top: 75px;
+            left: 10px;
+            right: 10px;
+            padding: 15px;
+            display: none;
+            flex-direction: column;
+            align-items: stretch;
+            border: 1px solid rgba(110, 130, 255, 0.25);
+            border-radius: 16px;
+            background: rgba(4, 10, 27, 0.97);
+            backdrop-filter: blur(20px);
+          }
+
+          .navLinks.mobileOpen {
+            display: flex;
+          }
+
+          .navLinks a {
+            padding: 12px;
+          }
+
+          .themeBtn,
+          .socialMini {
+            display: none;
+          }
+
+          .hamburger {
+            display: block;
+          }
+
+          .walletBtn {
+            padding: 10px 13px;
+            font-size: 10px;
+            min-width: 110px;
+          }
+
+          .section {
+            width: min(100% - 24px, 1160px);
+            padding: 70px 0;
+          }
+
+          .hero {
+            min-height: auto;
+            padding-top: 130px;
+          }
+
+          .hero h1 {
+            font-size: clamp(65px, 20vw, 100px);
+            letter-spacing: -5px;
+          }
+
+          .heroButtons {
+            flex-direction: column;
+          }
+
+          .primaryBtn,
+          .secondaryBtn {
+            width: 100%;
+          }
+
+          .heroVisual {
+            height: 430px;
+            transform: scale(0.85);
+            margin-left: -30px;
+            margin-right: -30px;
+          }
+
+          .planetMain {
+            width: 350px;
+            height: 350px;
+          }
+
+          .fox {
+            left: 17%;
+            transform: scale(0.8);
+          }
+
+          .heroQuote {
+            right: 0;
+            bottom: 15px;
           }
 
           .overviewGrid {
             grid-template-columns: 1fr 1fr;
           }
 
+          .priceCard {
+            grid-column: span 2;
+          }
+
+          .aboutSection,
+          .tokenomicsGrid {
+            grid-template-columns: 1fr;
+          }
+
           .roadmap {
             grid-template-columns: 1fr;
           }
 
-          .arrow {
+          .roadArrow {
             display: none;
           }
 
-          .communityFox {
+          .faqGrid {
+            grid-template-columns: 1fr;
+          }
+
+          .communityBox {
+            padding: 30px;
+          }
+
+          .communityPlanet {
             opacity: 0.25;
+            right: -50px;
           }
 
           .notifySection {
@@ -1397,160 +2524,63 @@ function NovaSite() {
 
           .notifySection form {
             min-width: 0;
-          }
-        }
-
-        @media (max-width: 700px) {
-          .navbarWrap {
-            padding: 0 10px;
+            width: 100%;
           }
 
-          .navLinks {
-            display: none;
-            position: absolute;
-            top: 75px;
-            left: 10px;
-            right: 10px;
-            padding: 15px;
-            flex-direction: column;
-            background: rgba(4, 10, 27, 0.98);
-            border: 1px solid rgba(100, 125, 255, 0.25);
-            border-radius: 15px;
-          }
-
-          .navLinks.open {
-            display: flex;
-          }
-
-          .social {
-            display: none;
-          }
-
-          .hamburger {
-            display: block;
-          }
-
-          .walletBtn {
-            padding: 10px 12px;
-            font-size: 10px;
-          }
-
-          .section {
-            width: calc(100% - 24px);
-            padding: 75px 0;
-          }
-
-          .hero {
-            padding-top: 130px;
-          }
-
-          .hero h1 {
-            font-size: 80px;
-          }
-
-          .heroVisual {
-            height: 430px;
-          }
-
-          .planet {
-            width: 330px;
-            height: 330px;
-          }
-
-          .fox {
-            font-size: 150px;
-          }
-
-          .orbit {
-            width: 390px;
-          }
-
-          .faq {
+          .footerInner {
             grid-template-columns: 1fr;
-          }
-
-          .communityBox {
-            padding: 30px;
-          }
-
-          .communityBox h2 {
-            font-size: 32px;
-          }
-
-          .communityButtons {
-            flex-direction: column;
-          }
-
-          .communityButtons a {
             text-align: center;
           }
 
-          .communityFox {
-            right: -30px;
-            font-size: 150px;
+          .footerInner > div {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
           }
 
-          .walletInfo {
-            right: -40px;
+          .copyright {
+            text-align: center;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .overviewGrid {
+            grid-template-columns: 1fr;
+          }
+
+          .priceCard {
+            grid-column: auto;
+          }
+
+          .countdown {
+            gap: 5px;
+          }
+
+          .countdown div {
+            padding: 8px 3px;
+          }
+
+          .countdown strong {
+            font-size: 18px;
+          }
+
+          .heroVisual {
+            transform: scale(0.7);
+            margin-top: -20px;
+            margin-bottom: -50px;
+          }
+
+          .notifySection form {
+            flex-direction: column;
+            border-radius: 15px;
+            gap: 5px;
+          }
+
+          .notifySection button {
+            min-height: 40px;
           }
         }
       `}</style>
     </main>
-  );
-}
-
-function Allocation({
-  name,
-  value,
-  width,
-}: {
-  name: string;
-  value: string;
-  width: string;
-}) {
-  return (
-    <>
-      <div className="allocationRow">
-        <span>{name}</span>
-        <strong>{value}</strong>
-      </div>
-
-      <div className="bar">
-        <span style={{ width }} />
-      </div>
-    </>
-  );
-}
-
-function Road({
-  phase,
-  title,
-  items,
-}: {
-  phase: string;
-  title: string;
-  items: string[];
-}) {
-  return (
-    <div className="roadCard">
-      <span className="phase">{phase}</span>
-      <h3>{title}</h3>
-
-      <ul>
-        {items.map((item) => (
-          <li key={item}>✓ {item}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-export default function Home() {
-  return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <NovaSite />
-      </QueryClientProvider>
-    </WagmiProvider>
   );
 }
