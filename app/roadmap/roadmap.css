@@ -1,0 +1,665 @@
+```tsx
+"use client";
+
+import Link from "next/link";
+
+const phases = [
+  {
+    number: "01",
+    title: "Genesis",
+    status: "COMPLETED",
+    description:
+      "NOVA foundation, identity and initial ecosystem architecture.",
+    items: [
+      "NOVA brand identity",
+      "Website launch",
+      "Community channels",
+      "Initial ecosystem design",
+    ],
+  },
+  {
+    number: "02",
+    title: "Community",
+    status: "LIVE",
+    description:
+      "Growing the NOVA community through social activities and rewards.",
+    items: [
+      "Social tasks",
+      "NOVA Points",
+      "Community campaigns",
+      "Community growth",
+    ],
+  },
+  {
+    number: "03",
+    title: "Token Launch",
+    status: "UPCOMING",
+    description:
+      "The next major milestone for the NOVA ecosystem.",
+    items: [
+      "Token launch",
+      "Token ecosystem",
+      "Community allocation",
+      "Launch campaign",
+    ],
+  },
+  {
+    number: "04",
+    title: "Ecosystem",
+    status: "UPCOMING",
+    description:
+      "Expanding NOVA beyond the initial launch.",
+    items: [
+      "Ecosystem expansion",
+      "New utilities",
+      "Partnerships",
+      "New community features",
+    ],
+  },
+];
+
+export default function RoadmapPage() {
+  return (
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "#05060a",
+        color: "white",
+        fontFamily: "Arial, Helvetica, sans-serif",
+      }}
+    >
+      <nav
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+          height: 75,
+          padding: "0 6%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "rgba(5,6,10,.9)",
+          backdropFilter: "blur(20px)",
+          borderBottom: "1px solid rgba(255,255,255,.08)",
+        }}
+      >
+        <Link
+          href="/"
+          style={{
+            color: "white",
+            textDecoration: "none",
+            fontWeight: 900,
+            fontSize: 21,
+            letterSpacing: 4,
+          }}
+        >
+          NOVA
+        </Link>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 20,
+            alignItems: "center",
+            fontSize: 13,
+          }}
+        >
+          <Link
+            href="/tasks"
+            style={{
+              color: "#aaa",
+              textDecoration: "none",
+            }}
+          >
+            Tasks
+          </Link>
+
+          <Link
+            href="/social"
+            style={{
+              color: "#aaa",
+              textDecoration: "none",
+            }}
+          >
+            Social
+          </Link>
+
+          <Link
+            href="/profile"
+            style={{
+              color: "#aaa",
+              textDecoration: "none",
+            }}
+          >
+            Profile
+          </Link>
+
+          <Link
+            href="/launch"
+            style={{
+              color: "white",
+              textDecoration: "none",
+              padding: "9px 14px",
+              borderRadius: 10,
+              background:
+                "linear-gradient(135deg,#7c3aed,#2563eb)",
+            }}
+          >
+            Launch
+          </Link>
+        </div>
+      </nav>
+
+      <section
+        style={{
+          maxWidth: 900,
+          margin: "auto",
+          padding: "55px 20px 90px",
+        }}
+      >
+        <Link
+          href="/"
+          style={{
+            color: "#777",
+            textDecoration: "none",
+            fontSize: 13,
+          }}
+        >
+          ← Back to NOVA
+        </Link>
+
+        <div
+          style={{
+            maxWidth: 700,
+            marginTop: 55,
+            marginBottom: 45,
+          }}
+        >
+          <div
+            style={{
+              color: "#8b7cff",
+              fontSize: 10,
+              fontWeight: "bold",
+              letterSpacing: 3,
+            }}
+          >
+            NOVA ROADMAP
+          </div>
+
+          <h1
+            style={{
+              fontSize: "clamp(50px,9vw,85px)",
+              lineHeight: 0.95,
+              letterSpacing: -5,
+              margin: "14px 0",
+            }}
+          >
+            Building the{" "}
+            <span
+              style={{
+                background:
+                  "linear-gradient(90deg,#a78bfa,#67e8f9)",
+                WebkitBackgroundClip: "text",
+                color: "transparent",
+              }}
+            >
+              future.
+            </span>
+          </h1>
+
+          <p
+            style={{
+              color: "#777",
+              fontSize: 15,
+              lineHeight: 1.8,
+              maxWidth: 600,
+            }}
+          >
+            NOVA is being built step by step.
+            Follow our roadmap and see where the
+            ecosystem is heading.
+          </p>
+        </div>
+
+        <div
+          style={{
+            padding: 25,
+            borderRadius: 22,
+            border:
+              "1px solid rgba(255,255,255,.08)",
+            background:
+              "rgba(255,255,255,.035)",
+            marginBottom: 60,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  color: "#777",
+                  fontSize: 9,
+                  letterSpacing: 2,
+                }}
+              >
+                ECOSYSTEM PROGRESS
+              </div>
+
+              <h2
+                style={{
+                  margin: "7px 0 0",
+                  fontSize: 21,
+                }}
+              >
+                NOVA Journey
+              </h2>
+            </div>
+
+            <strong
+              style={{
+                fontSize: 28,
+                color: "#a78bfa",
+              }}
+            >
+              50%
+            </strong>
+          </div>
+
+          <div
+            style={{
+              height: 7,
+              marginTop: 22,
+              borderRadius: 99,
+              background:
+                "rgba(255,255,255,.07)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: "50%",
+                height: "100%",
+                borderRadius: 99,
+                background:
+                  "linear-gradient(90deg,#7c3aed,#06b6d4)",
+              }}
+            />
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginTop: 10,
+              color: "#555",
+              fontSize: 8,
+            }}
+          >
+            <span>GENESIS</span>
+            <span>COMMUNITY</span>
+            <span>TOKEN LAUNCH</span>
+            <span>ECOSYSTEM</span>
+          </div>
+        </div>
+
+        <div
+          style={{
+            position: "relative",
+            display: "grid",
+            gap: 30,
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              left: 27,
+              top: 28,
+              bottom: 28,
+              width: 1,
+              background:
+                "linear-gradient(180deg,#7c3aed,rgba(124,58,237,.1))",
+            }}
+          />
+
+          {phases.map((phase) => {
+            const completed =
+              phase.status === "COMPLETED";
+
+            const live =
+              phase.status === "LIVE";
+
+            return (
+              <article
+                key={phase.number}
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  gap: 25,
+                }}
+              >
+                <div
+                  style={{
+                    position: "relative",
+                    zIndex: 2,
+                    width: 55,
+                    height: 55,
+                    minWidth: 55,
+                    display: "grid",
+                    placeItems: "center",
+                    borderRadius: 18,
+                    background: completed
+                      ? "linear-gradient(135deg,#7c3aed,#2563eb)"
+                      : "#090a10",
+                    border: live
+                      ? "1px solid rgba(6,182,212,.5)"
+                      : "1px solid rgba(255,255,255,.12)",
+                    color: "white",
+                    fontSize: 11,
+                    fontWeight: "bold",
+                    boxShadow: live
+                      ? "0 0 30px rgba(6,182,212,.18)"
+                      : "none",
+                  }}
+                >
+                  {completed ? "✓" : phase.number}
+                </div>
+
+                <div
+                  style={{
+                    flex: 1,
+                    padding: 27,
+                    borderRadius: 22,
+                    border: live
+                      ? "1px solid rgba(6,182,212,.25)"
+                      : "1px solid rgba(255,255,255,.08)",
+                    background: live
+                      ? "linear-gradient(110deg,rgba(124,58,237,.08),rgba(6,182,212,.04))"
+                      : "rgba(255,255,255,.035)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 15,
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          color: "#666",
+                          fontSize: 8,
+                          letterSpacing: 2,
+                        }}
+                      >
+                        PHASE {phase.number}
+                      </div>
+
+                      <h2
+                        style={{
+                          margin: "7px 0 0",
+                          fontSize: 27,
+                        }}
+                      >
+                        {phase.title}
+                      </h2>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: "7px 10px",
+                        borderRadius: 99,
+                        fontSize: 8,
+                        letterSpacing: 1,
+                        color: completed
+                          ? "#86efac"
+                          : live
+                          ? "#67e8f9"
+                          : "#777",
+                        background: completed
+                          ? "rgba(34,197,94,.08)"
+                          : live
+                          ? "rgba(6,182,212,.08)"
+                          : "rgba(255,255,255,.05)",
+                      }}
+                    >
+                      ● {phase.status}
+                    </div>
+                  </div>
+
+                  <p
+                    style={{
+                      color: "#777",
+                      fontSize: 13,
+                      lineHeight: 1.7,
+                      margin: "18px 0",
+                    }}
+                  >
+                    {phase.description}
+                  </p>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(2,minmax(0,1fr))",
+                      gap: 9,
+                    }}
+                  >
+                    {phase.items.map((item) => (
+                      <div
+                        key={item}
+                        style={{
+                          padding: 11,
+                          borderRadius: 10,
+                          background:
+                            "rgba(255,255,255,.025)",
+                          color: "#8b8e99",
+                          fontSize: 11,
+                        }}
+                      >
+                        <span
+                          style={{
+                            color: completed
+                              ? "#86efac"
+                              : "#8b7cff",
+                            marginRight: 7,
+                          }}
+                        >
+                          {completed ? "✓" : "✦"}
+                        </span>
+
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+
+                  {live && (
+                    <div
+                      style={{
+                        marginTop: 18,
+                        color: "#67e8f9",
+                        fontSize: 8,
+                        letterSpacing: 2,
+                      }}
+                    >
+                      ● CURRENTLY BUILDING
+                    </div>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 22,
+            marginTop: 65,
+            padding: 27,
+            borderRadius: 22,
+            border:
+              "1px solid rgba(124,58,237,.25)",
+            background:
+              "linear-gradient(110deg,rgba(124,58,237,.12),rgba(6,182,212,.05))",
+          }}
+        >
+          <div
+            style={{
+              width: 65,
+              height: 65,
+              minWidth: 65,
+              display: "grid",
+              placeItems: "center",
+              borderRadius: 20,
+              background:
+                "rgba(255,255,255,.05)",
+              fontSize: 30,
+            }}
+          >
+            🚀
+          </div>
+
+          <div style={{ flex: 1 }}>
+            <div
+              style={{
+                color: "#8b7cff",
+                fontSize: 9,
+                letterSpacing: 3,
+              }}
+            >
+              NEXT MAJOR MILESTONE
+            </div>
+
+            <h2
+              style={{
+                margin: "7px 0",
+                fontSize: 23,
+              }}
+            >
+              Token Launch
+            </h2>
+
+            <p
+              style={{
+                color: "#777",
+                fontSize: 12,
+                lineHeight: 1.7,
+                margin: 0,
+              }}
+            >
+              The countdown has started.
+              Stay active, collect NOVA Points
+              and follow the official channels.
+            </p>
+          </div>
+
+          <Link
+            href="/launch"
+            style={{
+              padding: "13px 18px",
+              borderRadius: 11,
+              background:
+                "linear-gradient(135deg,#7c3aed,#2563eb)",
+              color: "white",
+              textDecoration: "none",
+              fontSize: 11,
+              fontWeight: "bold",
+              whiteSpace: "nowrap",
+            }}
+          >
+            View Countdown →
+          </Link>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 10,
+            marginTop: 45,
+            flexWrap: "wrap",
+          }}
+        >
+          <Link
+            href="/tasks"
+            style={{
+              padding: "10px 15px",
+              borderRadius: 10,
+              background:
+                "rgba(255,255,255,.03)",
+              color: "#777",
+              textDecoration: "none",
+              fontSize: 10,
+            }}
+          >
+            ✦ Tasks
+          </Link>
+
+          <Link
+            href="/social"
+            style={{
+              padding: "10px 15px",
+              borderRadius: 10,
+              background:
+                "rgba(255,255,255,.03)",
+              color: "#777",
+              textDecoration: "none",
+              fontSize: 10,
+            }}
+          >
+            ◎ Social
+          </Link>
+
+          <Link
+            href="/profile"
+            style={{
+              padding: "10px 15px",
+              borderRadius: 10,
+              background:
+                "rgba(255,255,255,.03)",
+              color: "#777",
+              textDecoration: "none",
+              fontSize: 10,
+            }}
+          >
+            ◉ Profile
+          </Link>
+        </div>
+      </section>
+
+      <footer
+        style={{
+          padding: "30px 6%",
+          display: "flex",
+          justifyContent: "space-between",
+          borderTop:
+            "1px solid rgba(255,255,255,.07)",
+          color: "#666",
+          fontSize: 12,
+        }}
+      >
+        <strong
+          style={{
+            color: "white",
+            letterSpacing: 3,
+          }}
+        >
+          NOVA
+        </strong>
+
+        <span>
+          Building the future together 🦊
+        </span>
+      </footer>
+    </main>
+  );
+}
