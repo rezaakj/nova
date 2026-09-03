@@ -19,6 +19,14 @@ type Post = {
   created_at: string;
 };
 
+type UsernameStatus =
+  | "idle"
+  | "checking"
+  | "available"
+  | "taken"
+  | "invalid"
+  | "error";
+
 export default function Home() {
   const supabase = createClient();
 
@@ -31,8 +39,14 @@ export default function Home() {
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
 
+  const [usernameStatus, setUsernameStatus] =
+    useState<UsernameStatus>("idle");
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  const [emailSent, setEmailSent] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState(false);
 
   const [timers, setTimers] = useState<Record<string, number>>({});
   const [claiming, setClaiming] = useState<Record<string, boolean>>({});
@@ -43,22 +57,152 @@ export default function Home() {
 
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  /*
+   * USERNAME RULES
+   *
+   * Only lowercase a-z and numbers.
+   * Minimum: 8
+   * Maximum: 10
+   */
+  const USERNAME_REGEX = /^[a-z0-9]{8,10}$/;
+
   useEffect(() => {
-    loadProfile();
-    loadPosts();
-    checkDailyStatus();
+    void loadProfile();
+    void loadPosts();
+    void checkDailyStatus();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(() => {
-      loadProfile();
-      checkDailyStatus();
+      void loadProfile();
+      void checkDailyStatus();
     });
 
     return () => {
       subscription.unsubscribe();
     };
   }, []);
+
+  /*
+   * LIVE USERNAME AVAILABILITY CHECK
+   *
+   * This checks the profiles table without touching
+   * the database Unique Index.
+   */
+  useEffect(() => {
+    if (mode !== "signup") {
+      setUsernameStatus("idle");
+      return;
+    }
+
+    const cleanUsername = username.trim().toLowerCase();
+
+    if (!cleanUsername) {
+      setUsernameStatus("idle");
+      return;
+    }
+
+    if (!USERNAME_REGEX.test(cleanUsername)) {
+      setUsernameStatus("invalid");
+      return;
+    }
+
+    setUsernameStatus("checking");
+
+    const timeout = window.setTimeout(async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("username", cleanUsername)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Username availability error:", error);
+          setUsernameStatus("error");
+          return;
+        }
+
+        if (data) {
+          setUsernameStatus("taken");
+        } else {
+          setUsernameStatus("available");
+        }
+      } catch (error) {
+        console.error(error);
+        setUsernameStatus("error");
+      }
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [username, mode]);
+
+  async function checkUsernameAvailability(
+    value: string
+  ): Promise<boolean> {
+    const cleanUsername = value.trim().toLowerCase();
+
+    if (!USERNAME_REGEX.test(cleanUsername)) {
+      return false;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("username", cleanUsername)
+        .maybeSingle();
+
+      if (error) {
+        console.error(
+          "Final username availability check error:",
+          error
+        );
+
+        return false;
+      }
+
+      return !data;
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+  }
+
+  function handleUsernameChange(value: string) {
+    /*
+     * Automatically lowercase the username.
+     */
+    const lowerValue = value.toLowerCase();
+
+    /*
+     * Only allow a-z and 0-9.
+     *
+     * Any other character is removed automatically.
+     */
+    const cleanedValue = lowerValue.replace(
+      /[^a-z0-9]/g,
+      ""
+    );
+
+    /*
+     * Hard maximum of 10 characters.
+     */
+    const limitedValue = cleanedValue.slice(0, 10);
+
+    setUsername(limitedValue);
+
+    if (!limitedValue) {
+      setUsernameStatus("idle");
+      return;
+    }
+
+    if (!USERNAME_REGEX.test(limitedValue)) {
+      setUsernameStatus("invalid");
+    }
+  }
 
   async function loadProfile() {
     const {
@@ -71,6 +215,15 @@ export default function Home() {
       return;
     }
 
+    if (!user.email_confirmed_at) {
+      await supabase.auth.signOut();
+
+      setProfile(null);
+      setDailyClaimed(false);
+
+      return;
+    }
+
     const { data, error } = await supabase
       .from("profiles")
       .select("id,email,username,points")
@@ -78,15 +231,19 @@ export default function Home() {
       .single();
 
     if (!error && data) {
-      setProfile(data);
+      setProfile(data as Profile);
     }
   }
 
   async function loadPosts() {
     const { data, error } = await supabase
       .from("posts")
-      .select("id,title,content,x_url,points,created_at")
-      .order("created_at", { ascending: false });
+      .select(
+        "id,title,content,x_url,points,created_at"
+      )
+      .order("created_at", {
+        ascending: false,
+      });
 
     if (error) {
       console.error(error);
@@ -94,7 +251,7 @@ export default function Home() {
       return;
     }
 
-    setPosts(data || []);
+    setPosts((data || []) as Post[]);
   }
 
   async function checkDailyStatus() {
@@ -102,12 +259,14 @@ export default function Home() {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user) {
+    if (!user || !user.email_confirmed_at) {
       setDailyClaimed(false);
       return;
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date()
+      .toISOString()
+      .split("T")[0];
 
     const { data, error } = await supabase
       .from("daily_checkins")
@@ -131,76 +290,314 @@ export default function Home() {
     setDailyLoading(true);
     setMessage("");
 
-    const { data, error } = await supabase.rpc("claim_daily_checkin");
-
-    if (error) {
-      console.error(error);
-      setMessage(error.message);
-      setDailyLoading(false);
-      return;
-    }
-
-    if (data?.already_claimed) {
-      setDailyClaimed(true);
-      setMessage("You already claimed today's Daily Check-in.");
-      await loadProfile();
-      setDailyLoading(false);
-      return;
-    }
-
-    if (data?.success) {
-      setDailyClaimed(true);
-
-      setMessage(
-        `+${data.points} NOVA Points added successfully! 🦊`
+    try {
+      const { data, error } = await supabase.rpc(
+        "claim_daily_checkin"
       );
 
-      await loadProfile();
-    }
+      if (error) {
+        console.error(error);
+        setMessage(error.message);
+        return;
+      }
 
-    setDailyLoading(false);
+      if (data?.already_claimed) {
+        setDailyClaimed(true);
+
+        setMessage(
+          "You already claimed today's Daily Check-in."
+        );
+
+        await loadProfile();
+        return;
+      }
+
+      if (data?.success) {
+        setDailyClaimed(true);
+
+        const earnedPoints = Number(
+          data?.points ?? 0
+        );
+
+        setMessage(
+          "+" +
+            String(earnedPoints) +
+            " NOVA Points added successfully! 🦊"
+        );
+
+        await loadProfile();
+        return;
+      }
+
+      setMessage(
+        "Unable to claim today's reward."
+      );
+    } catch (error) {
+      console.error(error);
+
+      setMessage(
+        "Something went wrong while claiming your daily reward."
+      );
+    } finally {
+      setDailyLoading(false);
+    }
   }
 
-  async function handleAuth(event: FormEvent<HTMLFormElement>) {
+  async function handleAuth(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
+
+    if (loading) {
+      return;
+    }
 
     setLoading(true);
     setMessage("");
+    setEmailSent(false);
 
-    if (mode === "login") {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+    try {
+      /*
+       * LOGIN
+       */
+      if (mode === "login") {
+        const { data, error } =
+          await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password,
+          });
 
-      if (error) {
-        setMessage(error.message);
-      } else {
-        setMessage("Welcome back to NOVA 🦊");
+        if (error) {
+          const errorText =
+            error.message.toLowerCase();
+
+          if (
+            errorText.includes(
+              "email not confirmed"
+            ) ||
+            errorText.includes(
+              "email_not_confirmed"
+            )
+          ) {
+            setEmailSent(true);
+
+            setMessage(
+              "Your email has not been confirmed yet. Please check your inbox and verify your NOVA account."
+            );
+          } else {
+            setMessage(error.message);
+          }
+
+          return;
+        }
+
+        if (!data.user) {
+          setMessage(
+            "Unable to sign in. Please try again."
+          );
+
+          return;
+        }
+
+        if (!data.user.email_confirmed_at) {
+          await supabase.auth.signOut();
+
+          setEmailSent(true);
+
+          setMessage(
+            "Please confirm your email before entering the NOVA ecosystem."
+          );
+
+          return;
+        }
+
+        setMessage(
+          "Welcome back to NOVA 🦊"
+        );
+
         await loadProfile();
         await checkDailyStatus();
+
+        return;
       }
-    } else {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            username: username || email.split("@")[0],
+
+      /*
+       * SIGNUP
+       */
+      const cleanEmail = email.trim();
+      const cleanUsername =
+        username.trim().toLowerCase();
+
+      /*
+       * FINAL USERNAME FORMAT VALIDATION
+       */
+      if (!USERNAME_REGEX.test(cleanUsername)) {
+        setUsernameStatus("invalid");
+
+        setMessage(
+          "Username must contain only a-z and 0-9 and be 8-10 characters long."
+        );
+
+        return;
+      }
+
+      /*
+       * FINAL AVAILABILITY CHECK
+       *
+       * This happens immediately before signUp.
+       */
+      setUsernameStatus("checking");
+
+      const usernameAvailable =
+        await checkUsernameAvailability(
+          cleanUsername
+        );
+
+      if (!usernameAvailable) {
+        setUsernameStatus("taken");
+
+        setMessage(
+          "This username is already taken. Please choose another one."
+        );
+
+        return;
+      }
+
+      setUsernameStatus("available");
+
+      /*
+       * SIGNUP
+       */
+      const { data, error } =
+        await supabase.auth.signUp({
+          email: cleanEmail,
+          password,
+          options: {
+            data: {
+              username: cleanUsername,
+            },
           },
-        },
-      });
+        });
 
       if (error) {
+        /*
+         * Keep the existing database Unique Index
+         * as the final protection against race conditions.
+         */
+        const errorText =
+          error.message.toLowerCase();
+
+        if (
+          errorText.includes("username") &&
+          (errorText.includes("duplicate") ||
+            errorText.includes("unique") ||
+            errorText.includes("already"))
+        ) {
+          setUsernameStatus("taken");
+
+          setMessage(
+            "This username was just taken. Please choose another username."
+          );
+
+          return;
+        }
+
         setMessage(error.message);
-      } else {
-        setMessage(
-          "Account created. Check your email to confirm your account."
-        );
+        return;
       }
+
+      if (data.user && !data.session) {
+        setEmailSent(true);
+
+        setMessage(
+          "Account created successfully! A confirmation email has been sent to you."
+        );
+
+        setMode("login");
+
+        return;
+      }
+
+      if (data.user && data.session) {
+        if (!data.user.email_confirmed_at) {
+          await supabase.auth.signOut();
+
+          setEmailSent(true);
+
+          setMessage(
+            "Account created. Please confirm your email before entering NOVA."
+          );
+
+          setMode("login");
+
+          return;
+        }
+
+        setMessage(
+          "Your NOVA account was created successfully! 🦊"
+        );
+
+        await loadProfile();
+        await checkDailyStatus();
+
+        return;
+      }
+
+      setEmailSent(true);
+
+      setMessage(
+        "Account created. Please check your email to confirm your NOVA account."
+      );
+
+      setMode("login");
+    } catch (error) {
+      console.error(error);
+
+      setMessage(
+        "Something went wrong. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resendConfirmationEmail() {
+    const cleanEmail = email.trim();
+
+    if (!cleanEmail || resendingEmail) {
+      return;
     }
 
-    setLoading(false);
+    setResendingEmail(true);
+    setMessage("");
+
+    try {
+      const { error } =
+        await supabase.auth.resend({
+          type: "signup",
+          email: cleanEmail,
+        });
+
+      if (error) {
+        console.error(error);
+        setMessage(error.message);
+        return;
+      }
+
+      setEmailSent(true);
+
+      setMessage(
+        "A new confirmation email has been sent. Please check your inbox. 📧"
+      );
+    } catch (error) {
+      console.error(error);
+
+      setMessage(
+        "Could not resend the confirmation email."
+      );
+    } finally {
+      setResendingEmail(false);
+    }
   }
 
   async function logout() {
@@ -212,15 +609,19 @@ export default function Home() {
     setClaiming({});
     setDailyClaimed(false);
     setMessage("");
+    setEmailSent(false);
+    setMobileOpen(false);
   }
 
   async function startActivity(post: Post) {
     if (!profile) {
       setMessage("Please login first.");
 
-      document.getElementById("auth")?.scrollIntoView({
-        behavior: "smooth",
-      });
+      document
+        .getElementById("auth")
+        ?.scrollIntoView({
+          behavior: "smooth",
+        });
 
       return;
     }
@@ -235,46 +636,82 @@ export default function Home() {
 
     setMessage("");
 
-    const { data, error } = await supabase.rpc("start_post_activity", {
-      p_post_id: post.id,
-    });
+    try {
+      const { data, error } =
+        await supabase.rpc(
+          "start_post_activity",
+          {
+            p_post_id: post.id,
+          }
+        );
 
-    if (error) {
-      console.error(error);
-      setMessage(error.message);
-      return;
-    }
+      if (error) {
+        console.error(error);
+        setMessage(error.message);
+        return;
+      }
 
-    if (data?.already_claimed) {
-      setClaimed((current) => ({
-        ...current,
-        [post.id]: true,
-      }));
+      if (data?.already_claimed) {
+        setClaimed((current) => ({
+          ...current,
+          [post.id]: true,
+        }));
 
-      return;
-    }
+        setMessage(
+          "You already completed this mission."
+        );
 
-    window.open(post.x_url, "_blank", "noopener,noreferrer");
+        return;
+      }
 
-    let remaining = 30;
+      if (!post.x_url) {
+        setMessage(
+          "This mission does not have an X link."
+        );
 
-    setTimers((current) => ({
-      ...current,
-      [post.id]: remaining,
-    }));
+        return;
+      }
 
-    const interval = window.setInterval(() => {
-      remaining -= 1;
+      window.open(
+        post.x_url,
+        "_blank",
+        "noopener,noreferrer"
+      );
+
+      let remaining = 30;
 
       setTimers((current) => ({
         ...current,
         [post.id]: remaining,
       }));
 
-      if (remaining <= 0) {
-        window.clearInterval(interval);
-      }
-    }, 1000);
+      const interval = window.setInterval(() => {
+        remaining -= 1;
+
+        setTimers((current) => {
+          if (remaining <= 0) {
+            const next = { ...current };
+            next[post.id] = 0;
+            return next;
+          }
+
+          return {
+            ...current,
+            [post.id]: remaining,
+          };
+        });
+
+        if (remaining <= 0) {
+          window.clearInterval(interval);
+        }
+      }, 1000);
+    } catch (error) {
+      console.error(error);
+
+      setMessage(
+        "Something went wrong while starting the mission."
+      );
+    }
   }
 
   async function claimPoints(post: Post) {
@@ -283,7 +720,10 @@ export default function Home() {
       return;
     }
 
-    if (claiming[post.id] || claimed[post.id]) {
+    if (
+      claiming[post.id] ||
+      claimed[post.id]
+    ) {
       return;
     }
 
@@ -294,60 +734,76 @@ export default function Home() {
 
     setMessage("");
 
-    const { data, error } = await supabase.rpc("claim_post_points", {
-      p_post_id: post.id,
-    });
+    try {
+      const { data, error } =
+        await supabase.rpc(
+          "claim_post_points",
+          {
+            p_post_id: post.id,
+          }
+        );
 
-    if (error) {
-      console.error(error);
+      if (error) {
+        console.error(error);
+        setMessage(error.message);
+        return;
+      }
 
-      setMessage(error.message);
+      if (data?.already_claimed) {
+        setClaimed((current) => ({
+          ...current,
+          [post.id]: true,
+        }));
 
-      setClaiming((current) => ({
-        ...current,
-        [post.id]: false,
-      }));
+        setMessage(
+          "You already claimed this mission."
+        );
 
-      return;
-    }
+        return;
+      }
 
-    if (data?.already_claimed) {
-      setClaimed((current) => ({
-        ...current,
-        [post.id]: true,
-      }));
+      if (data?.success) {
+        setClaimed((current) => ({
+          ...current,
+          [post.id]: true,
+        }));
 
-      setClaiming((current) => ({
-        ...current,
-        [post.id]: false,
-      }));
+        setTimers((current) => {
+          const next = { ...current };
+          delete next[post.id];
+          return next;
+        });
 
-      return;
-    }
+        const earnedPoints = Number(
+          data?.points ?? post.points ?? 0
+        );
 
-    if (data?.success) {
-      setClaimed((current) => ({
-        ...current,
-        [post.id]: true,
-      }));
+        setMessage(
+          "+" +
+            String(earnedPoints) +
+            " NOVA Points added successfully! 🦊"
+        );
 
-      setTimers((current) => {
-        const next = { ...current };
-        delete next[post.id];
-        return next;
-      });
+        await loadProfile();
+
+        return;
+      }
 
       setMessage(
-        `+${data.points} NOVA Points added successfully! 🦊`
+        "Unable to claim NOVA Points."
       );
+    } catch (error) {
+      console.error(error);
 
-      await loadProfile();
+      setMessage(
+        "Something went wrong while claiming points."
+      );
+    } finally {
+      setClaiming((current) => ({
+        ...current,
+        [post.id]: false,
+      }));
     }
-
-    setClaiming((current) => ({
-      ...current,
-      [post.id]: false,
-    }));
   }
 
   function closeMobileMenu() {
@@ -357,14 +813,31 @@ export default function Home() {
   function scrollToSection(id: string) {
     setMobileOpen(false);
 
-    document.getElementById(id)?.scrollIntoView({
-      behavior: "smooth",
-    });
+    document
+      .getElementById(id)
+      ?.scrollIntoView({
+        behavior: "smooth",
+      });
+  }
+
+  function switchAuthMode(
+    nextMode: "login" | "signup"
+  ) {
+    setMode(nextMode);
+    setMessage("");
+    setEmailSent(false);
+
+    if (nextMode === "login") {
+      setPassword("");
+      setUsername("");
+      setUsernameStatus("idle");
+    }
   }
 
   return (
     <main className="site">
       <div className="background-grid" />
+
       <div className="orb orb-one" />
       <div className="orb orb-two" />
       <div className="orb orb-three" />
@@ -372,7 +845,11 @@ export default function Home() {
       {/* NAVBAR */}
       <header className="navbar">
         <div className="nav-inner">
-          <a href="/" className="brand" onClick={closeMobileMenu}>
+          <a
+            href="/"
+            className="brand"
+            onClick={closeMobileMenu}
+          >
             <div className="brand-mark">
               <div className="brand-ring" />
               <span>✦</span>
@@ -384,30 +861,53 @@ export default function Home() {
             </div>
           </a>
 
-          <nav className={`nav-links ${mobileOpen ? "mobile-show" : ""}`}>
+          <nav
+            className={
+              "nav-links " +
+              (mobileOpen
+                ? "mobile-show"
+                : "")
+            }
+          >
             <a href="/" onClick={closeMobileMenu}>
               Home
             </a>
 
-            <a href="/tasks" onClick={closeMobileMenu}>
+            <a
+              href="/tasks"
+              onClick={closeMobileMenu}
+            >
               Tasks
             </a>
 
-            <a href="/social" onClick={closeMobileMenu}>
+            <a
+              href="/social"
+              onClick={closeMobileMenu}
+            >
               Social
             </a>
 
-            <a href="/roadmap" onClick={closeMobileMenu}>
+            <a
+              href="/roadmap"
+              onClick={closeMobileMenu}
+            >
               Roadmap
             </a>
 
-            <a href="/launch" className="launch-nav" onClick={closeMobileMenu}>
+            <a
+              href="/launch"
+              className="launch-nav"
+              onClick={closeMobileMenu}
+            >
               <span>🚀</span>
               Launch
             </a>
 
             {profile && (
-              <a href="/profile" onClick={closeMobileMenu}>
+              <a
+                href="/profile"
+                onClick={closeMobileMenu}
+              >
                 Profile
               </a>
             )}
@@ -436,15 +936,29 @@ export default function Home() {
             </a>
 
             {profile && (
-              <button className="logout-button" onClick={logout}>
+              <button
+                type="button"
+                className="logout-button"
+                onClick={logout}
+              >
                 Logout
               </button>
             )}
           </div>
 
           <button
-            className={`menu-button ${mobileOpen ? "active" : ""}`}
-            onClick={() => setMobileOpen((value) => !value)}
+            type="button"
+            className={
+              "menu-button " +
+              (mobileOpen
+                ? "active"
+                : "")
+            }
+            onClick={() =>
+              setMobileOpen(
+                (value) => !value
+              )
+            }
             aria-label="Toggle menu"
           >
             <span />
@@ -463,8 +977,12 @@ export default function Home() {
           </div>
 
           <div className="hero-title">
-            <span className="title-small">WELCOME TO</span>
+            <span className="title-small">
+              WELCOME TO
+            </span>
+
             <h1>NOVA</h1>
+
             <div className="title-line">
               <span>Build.</span>
               <span>Connect.</span>
@@ -473,26 +991,37 @@ export default function Home() {
           </div>
 
           <p className="hero-description">
-            Join the next-generation NOVA community. Complete social
-            activities, collect NOVA Points and grow with the ecosystem.
+            Join the next-generation NOVA
+            community. Complete social
+            activities, collect NOVA Points
+            and grow with the ecosystem.
           </p>
 
           <div className="hero-buttons">
             <button
+              type="button"
               className="primary-button"
               onClick={() =>
                 profile
-                  ? scrollToSection("activities")
+                  ? scrollToSection(
+                      "activities"
+                    )
                   : scrollToSection("auth")
               }
             >
               <span>
-                {profile ? "Explore Tasks" : "Join NOVA"}
+                {profile
+                  ? "Explore Tasks"
+                  : "Join NOVA"}
               </span>
+
               <strong>↗</strong>
             </button>
 
-            <a href="/roadmap" className="secondary-button">
+            <a
+              href="/roadmap"
+              className="secondary-button"
+            >
               <span>View Roadmap</span>
               <strong>→</strong>
             </a>
@@ -507,7 +1036,10 @@ export default function Home() {
             <div className="stat-divider" />
 
             <div>
-              <strong>{posts.length || "∞"}</strong>
+              <strong>
+                {posts.length || "∞"}
+              </strong>
+
               <span>ACTIVITIES</span>
             </div>
 
@@ -547,6 +1079,7 @@ export default function Home() {
 
           <div className="floating-card card-top">
             <span>✦</span>
+
             <div>
               <small>COMMUNITY</small>
               <strong>ACTIVE</strong>
@@ -555,6 +1088,7 @@ export default function Home() {
 
           <div className="floating-card card-bottom">
             <span>◈</span>
+
             <div>
               <small>REWARD</small>
               <strong>+POINTS</strong>
@@ -568,22 +1102,43 @@ export default function Home() {
         <section className="profile-section">
           <div className="profile-card">
             <div className="profile-avatar">
-              {(profile.username || "N").charAt(0).toUpperCase()}
+              {(profile.username || "N")
+                .charAt(0)
+                .toUpperCase()}
             </div>
 
             <div className="profile-info">
               <span>YOUR NOVA IDENTITY</span>
-              <h2>{profile.username || "NOVA User"}</h2>
-              <p>{profile.email || "Connected member"}</p>
+
+              <h2>
+                {profile.username ||
+                  "NOVA User"}
+              </h2>
+
+              <p>
+                {profile.email ||
+                  "Connected member"}
+              </p>
             </div>
 
             <div className="profile-points">
               <span>NOVA POINTS</span>
-              <strong>{profile.points.toLocaleString()}</strong>
-              <small>AVAILABLE BALANCE</small>
+
+              <strong>
+                {Number(
+                  profile.points || 0
+                ).toLocaleString()}
+              </strong>
+
+              <small>
+                AVAILABLE BALANCE
+              </small>
             </div>
 
-            <a href="/profile" className="profile-arrow">
+            <a
+              href="/profile"
+              className="profile-arrow"
+            >
               →
             </a>
           </div>
@@ -593,22 +1148,91 @@ export default function Home() {
       {/* MESSAGE */}
       {message && (
         <div className="message-wrap">
-          <div className="message">
-            <span className="message-icon">✦</span>
-            <span>{message}</span>
-            <button onClick={() => setMessage("")}>×</button>
+          <div
+            className={
+              "message " +
+              (emailSent
+                ? "message-email"
+                : "")
+            }
+          >
+            <div className="message-icon">
+              {emailSent ? "✉" : "✦"}
+            </div>
+
+            <div className="message-content">
+              <strong>
+                {emailSent
+                  ? "EMAIL VERIFICATION REQUIRED"
+                  : "NOVA NOTIFICATION"}
+              </strong>
+
+              <span>{message}</span>
+
+              {emailSent && (
+                <div className="email-actions">
+                  <button
+                    type="button"
+                    onClick={
+                      resendConfirmationEmail
+                    }
+                    disabled={
+                      resendingEmail ||
+                      !email.trim()
+                    }
+                    className="resend-button"
+                  >
+                    {resendingEmail
+                      ? "SENDING..."
+                      : "↻ RESEND EMAIL"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="continue-login-button"
+                    onClick={() => {
+                      setMode("login");
+                      setEmailSent(false);
+                      setMessage("");
+                    }}
+                  >
+                    GO TO LOGIN →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              className="message-close"
+              onClick={() => {
+                setMessage("");
+                setEmailSent(false);
+              }}
+              aria-label="Close notification"
+            >
+              ×
+            </button>
           </div>
         </div>
       )}
 
       {/* AUTH */}
       {!profile && (
-        <section className="auth-section" id="auth">
+        <section
+          className="auth-section"
+          id="auth"
+        >
           <div className="section-heading">
             <span>01 / ACCESS</span>
-            <h2>Enter the NOVA universe.</h2>
+
+            <h2>
+              Enter the NOVA universe.
+            </h2>
+
             <p>
-              Create your account or continue your journey with NOVA.
+              Create your account or continue
+              your journey with NOVA.
             </p>
           </div>
 
@@ -616,27 +1240,38 @@ export default function Home() {
             <div className="auth-decoration">
               <div className="auth-ring ring-one" />
               <div className="auth-ring ring-two" />
-              <div className="auth-symbol">✦</div>
+
+              <div className="auth-symbol">
+                ✦
+              </div>
             </div>
 
             <div className="auth-content">
               <div className="auth-tabs">
                 <button
-                  className={mode === "login" ? "active" : ""}
-                  onClick={() => {
-                    setMode("login");
-                    setMessage("");
-                  }}
+                  type="button"
+                  className={
+                    mode === "login"
+                      ? "active"
+                      : ""
+                  }
+                  onClick={() =>
+                    switchAuthMode("login")
+                  }
                 >
                   Login
                 </button>
 
                 <button
-                  className={mode === "signup" ? "active" : ""}
-                  onClick={() => {
-                    setMode("signup");
-                    setMessage("");
-                  }}
+                  type="button"
+                  className={
+                    mode === "signup"
+                      ? "active"
+                      : ""
+                  }
+                  onClick={() =>
+                    switchAuthMode("signup")
+                  }
                 >
                   Register
                 </button>
@@ -656,40 +1291,150 @@ export default function Home() {
                 </p>
               </div>
 
-              <form onSubmit={handleAuth} className="auth-form">
+              <form
+                onSubmit={handleAuth}
+                className="auth-form"
+              >
                 {mode === "signup" && (
                   <label>
-                    <span>USERNAME</span>
-                    <input
-                      type="text"
-                      placeholder="nova_user"
-                      value={username}
-                      onChange={(event) =>
-                        setUsername(event.target.value)
-                      }
-                    />
+                    <span>
+                      USERNAME
+                    </span>
+
+                    <div className="username-input-wrap">
+                      <input
+                        type="text"
+                        placeholder="novafox18"
+                        value={username}
+                        onChange={(event) =>
+                          handleUsernameChange(
+                            event.target.value
+                          )
+                        }
+                        minLength={8}
+                        maxLength={10}
+                        autoComplete="username"
+                        spellCheck={false}
+                        required
+                        aria-invalid={
+                          usernameStatus ===
+                            "invalid" ||
+                          usernameStatus ===
+                            "taken"
+                        }
+                      />
+
+                      {usernameStatus ===
+                        "checking" && (
+                        <span className="username-spinner">
+                          ◌
+                        </span>
+                      )}
+
+                      {usernameStatus ===
+                        "available" && (
+                        <span className="username-check">
+                          ✓
+                        </span>
+                      )}
+
+                      {usernameStatus ===
+                        "taken" && (
+                        <span className="username-cross">
+                          ×
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="username-meta">
+                      <span>
+                        8–10 characters · a-z, 0-9
+                      </span>
+
+                      <span
+                        className={
+                          username.length ===
+                          10
+                            ? "limit-reached"
+                            : ""
+                        }
+                      >
+                        {username.length}/10
+                      </span>
+                    </div>
+
+                    {usernameStatus ===
+                      "available" && (
+                      <div className="username-status available">
+                        ✓ Username available
+                      </div>
+                    )}
+
+                    {usernameStatus ===
+                      "taken" && (
+                      <div className="username-status taken">
+                        ✕ Username already taken
+                      </div>
+                    )}
+
+                    {usernameStatus ===
+                      "invalid" &&
+                      username.length > 0 && (
+                        <div className="username-status invalid">
+                          Username must be 8–10 characters and use only a-z and 0-9.
+                        </div>
+                      )}
+
+                    {usernameStatus ===
+                      "checking" && (
+                      <div className="username-status checking">
+                        Checking username...
+                      </div>
+                    )}
+
+                    {usernameStatus ===
+                      "error" && (
+                      <div className="username-status error">
+                        Could not check username availability. Please try again.
+                      </div>
+                    )}
                   </label>
                 )}
 
                 <label>
                   <span>EMAIL</span>
+
                   <input
                     type="email"
                     placeholder="you@example.com"
                     value={email}
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) =>
+                      setEmail(
+                        event.target.value
+                      )
+                    }
+                    autoComplete="email"
                     required
                   />
                 </label>
 
                 <label>
                   <span>PASSWORD</span>
+
                   <input
                     type="password"
                     placeholder="••••••••"
                     value={password}
                     onChange={(event) =>
-                      setPassword(event.target.value)
+                      setPassword(
+                        event.target.value
+                      )
+                    }
+                    minLength={6}
+                    autoComplete={
+                      mode === "login"
+                        ? "current-password"
+                        : "new-password"
                     }
                     required
                   />
@@ -698,7 +1443,12 @@ export default function Home() {
                 <button
                   type="submit"
                   className="auth-submit"
-                  disabled={loading}
+                  disabled={
+                    loading ||
+                    (mode === "signup" &&
+                      usernameStatus !==
+                        "available")
+                  }
                 >
                   <span>
                     {loading
@@ -707,6 +1457,7 @@ export default function Home() {
                       ? "ENTER NOVA"
                       : "CREATE ACCOUNT"}
                   </span>
+
                   <strong>↗</strong>
                 </button>
               </form>
@@ -720,8 +1471,15 @@ export default function Home() {
         <section className="daily-section">
           <div className="section-heading">
             <span>02 / DAILY</span>
-            <h2>Keep your streak alive.</h2>
-            <p>Check in every day and collect your NOVA reward.</p>
+
+            <h2>
+              Keep your streak alive.
+            </h2>
+
+            <p>
+              Check in every day and collect
+              your NOVA reward.
+            </p>
           </div>
 
           <div className="daily-card">
@@ -730,7 +1488,10 @@ export default function Home() {
             </div>
 
             <div className="daily-content">
-              <div className="daily-label">DAILY CHECK-IN</div>
+              <div className="daily-label">
+                DAILY CHECK-IN
+              </div>
+
               <h3>
                 {dailyClaimed
                   ? "Today's reward is secured."
@@ -746,16 +1507,25 @@ export default function Home() {
 
             <div className="daily-reward">
               <span>REWARD</span>
+
               <strong>+100</strong>
+
               <small>NOVA POINTS</small>
             </div>
 
             <button
-              className={`daily-button ${
-                dailyClaimed ? "completed" : ""
-              }`}
+              type="button"
+              className={
+                "daily-button " +
+                (dailyClaimed
+                  ? "completed"
+                  : "")
+              }
               onClick={claimDailyCheckin}
-              disabled={dailyClaimed || dailyLoading}
+              disabled={
+                dailyClaimed ||
+                dailyLoading
+              }
             >
               {dailyLoading
                 ? "CLAIMING..."
@@ -768,13 +1538,23 @@ export default function Home() {
       )}
 
       {/* ACTIVITIES */}
-      <section className="activities-section" id="activities">
+      <section
+        className="activities-section"
+        id="activities"
+      >
         <div className="section-heading activities-heading">
           <div>
-            <span>03 / SOCIAL MISSIONS</span>
-            <h2>Complete. Engage. Earn.</h2>
+            <span>
+              03 / SOCIAL MISSIONS
+            </span>
+
+            <h2>
+              Complete. Engage. Earn.
+            </h2>
+
             <p>
-              Interact with NOVA social activities and unlock points.
+              Interact with NOVA social activities
+              and unlock points.
             </p>
           </div>
 
@@ -787,28 +1567,44 @@ export default function Home() {
         <div className="activity-grid">
           {posts.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon">✦</div>
-              <h3>No missions available</h3>
+              <div className="empty-icon">
+                ✦
+              </div>
+
+              <h3>
+                No missions available
+              </h3>
+
               <p>
-                New NOVA activities will appear here when they are
-                published.
+                New NOVA activities will appear
+                here when they are published.
               </p>
             </div>
           ) : (
             posts.map((post, index) => {
-              const timer = timers[post.id];
-              const isClaimed = claimed[post.id];
-              const isClaiming = claiming[post.id];
+              const timer =
+                timers[post.id];
+
+              const isClaimed =
+                claimed[post.id];
+
+              const isClaiming =
+                claiming[post.id];
 
               return (
                 <article
                   key={post.id}
-                  className={`activity-card ${
-                    isClaimed ? "is-claimed" : ""
-                  }`}
+                  className={
+                    "activity-card " +
+                    (isClaimed
+                      ? "is-claimed"
+                      : "")
+                  }
                 >
                   <div className="activity-number">
-                    {String(index + 1).padStart(2, "0")}
+                    {String(
+                      index + 1
+                    ).padStart(2, "0")}
                   </div>
 
                   <div className="activity-top">
@@ -822,7 +1618,10 @@ export default function Home() {
 
                     <div className="activity-reward">
                       <span>REWARD</span>
-                      <strong>+{post.points}</strong>
+
+                      <strong>
+                        +{post.points}
+                      </strong>
                     </div>
                   </div>
 
@@ -837,49 +1636,83 @@ export default function Home() {
                   </div>
 
                   <div className="activity-footer">
-                    {timer !== undefined && timer > 0 ? (
+                    {timer !== undefined &&
+                    timer > 0 ? (
                       <div className="timer-box">
                         <div className="timer-circle">
-                          <span>{timer}</span>
+                          <span>
+                            {timer}
+                          </span>
                         </div>
 
                         <div>
-                          <strong>MISSION ACTIVE</strong>
+                          <strong>
+                            MISSION ACTIVE
+                          </strong>
+
                           <small>
-                            Stay on X for {timer}s...
+                            Stay on X for{" "}
+                            {timer}s...
                           </small>
                         </div>
                       </div>
                     ) : isClaimed ? (
                       <div className="claimed-box">
                         <span>✓</span>
+
                         <div>
-                          <strong>REWARD CLAIMED</strong>
-                          <small>NOVA Points added</small>
+                          <strong>
+                            REWARD CLAIMED
+                          </strong>
+
+                          <small>
+                            NOVA Points added
+                          </small>
                         </div>
                       </div>
                     ) : (
                       <button
+                        type="button"
                         className="activity-button"
-                        onClick={() => startActivity(post)}
-                        disabled={isClaiming}
+                        onClick={() =>
+                          startActivity(
+                            post
+                          )
+                        }
+                        disabled={
+                          isClaiming
+                        }
                       >
-                        <span>OPEN X</span>
+                        <span>
+                          OPEN X
+                        </span>
+
                         <strong>↗</strong>
                       </button>
                     )}
 
-                    {timer === 0 && !isClaimed && (
-                      <button
-                        className="claim-button"
-                        onClick={() => claimPoints(post)}
-                        disabled={isClaiming}
-                      >
-                        {isClaiming
-                          ? "CLAIMING..."
-                          : `CLAIM +${post.points}`}
-                      </button>
-                    )}
+                    {timer === 0 &&
+                      !isClaimed && (
+                        <button
+                          type="button"
+                          className="claim-button"
+                          onClick={() =>
+                            claimPoints(
+                              post
+                            )
+                          }
+                          disabled={
+                            isClaiming
+                          }
+                        >
+                          {isClaiming
+                            ? "CLAIMING..."
+                            : "CLAIM +" +
+                              String(
+                                post.points
+                              )}
+                        </button>
+                      )}
                   </div>
                 </article>
               );
@@ -894,25 +1727,39 @@ export default function Home() {
           <div className="ecosystem-glow" />
 
           <div className="ecosystem-content">
-            <span>THE NOVA ECOSYSTEM</span>
+            <span>
+              THE NOVA ECOSYSTEM
+            </span>
+
             <h2>
               More than points.
               <br />
-              <em>A community in motion.</em>
+              <em>
+                A community in motion.
+              </em>
             </h2>
 
             <p>
-              Follow the roadmap, complete missions, connect with the
-              community and be ready for what's next.
+              Follow the roadmap, complete
+              missions, connect with the community
+              and be ready for what's next.
             </p>
 
             <div className="ecosystem-actions">
-              <a href="/roadmap" className="eco-button">
-                Roadmap <strong>→</strong>
+              <a
+                href="/roadmap"
+                className="eco-button"
+              >
+                Roadmap
+                <strong>→</strong>
               </a>
 
-              <a href="/launch" className="eco-button outline">
-                Launch <strong>↗</strong>
+              <a
+                href="/launch"
+                className="eco-button outline"
+              >
+                Launch
+                <strong>↗</strong>
               </a>
             </div>
           </div>
@@ -920,13 +1767,22 @@ export default function Home() {
           <div className="ecosystem-visual">
             <div className="eco-orbit eco-orbit-one" />
             <div className="eco-orbit eco-orbit-two" />
+
             <div className="eco-core">
               <span>✦</span>
             </div>
 
-            <div className="eco-node node-one">01</div>
-            <div className="eco-node node-two">02</div>
-            <div className="eco-node node-three">03</div>
+            <div className="eco-node node-one">
+              01
+            </div>
+
+            <div className="eco-node node-two">
+              02
+            </div>
+
+            <div className="eco-node node-three">
+              03
+            </div>
           </div>
         </div>
       </section>
@@ -941,7 +1797,9 @@ export default function Home() {
 
           <div>
             <strong>NOVA</strong>
-            <span>COMMUNITY ECOSYSTEM</span>
+            <span>
+              COMMUNITY ECOSYSTEM
+            </span>
           </div>
         </div>
 
@@ -949,9 +1807,16 @@ export default function Home() {
           <a href="/">Home</a>
           <a href="/tasks">Tasks</a>
           <a href="/social">Social</a>
-          <a href="/roadmap">Roadmap</a>
+          <a href="/roadmap">
+            Roadmap
+          </a>
           <a href="/launch">Launch</a>
-          {profile && <a href="/profile">Profile</a>}
+
+          {profile && (
+            <a href="/profile">
+              Profile
+            </a>
+          )}
         </div>
 
         <div className="footer-socials">
@@ -974,7 +1839,9 @@ export default function Home() {
 
         <div className="footer-bottom">
           <span>© 2026 NOVA</span>
-          <span>BUILDING THE NEXT WAVE ✦</span>
+          <span>
+            BUILDING THE NEXT WAVE ✦
+          </span>
         </div>
       </footer>
 
@@ -990,7 +1857,7 @@ export default function Home() {
         body {
           margin: 0;
           background: #03030a;
-          color: #ffffff;
+          color: #fff;
           font-family:
             Inter,
             ui-sans-serif,
@@ -1031,7 +1898,12 @@ export default function Home() {
               rgba(0, 210, 255, 0.1),
               transparent 25%
             ),
-            linear-gradient(135deg, #020207 0%, #05050f 50%, #020207 100%);
+            linear-gradient(
+              135deg,
+              #020207 0%,
+              #05050f 50%,
+              #020207 100%
+            );
         }
 
         .background-grid {
@@ -1041,12 +1913,12 @@ export default function Home() {
           opacity: 0.28;
           background-image:
             linear-gradient(
-              rgba(255, 255, 255, 0.025) 1px,
+              rgba(255,255,255,0.025) 1px,
               transparent 1px
             ),
             linear-gradient(
               90deg,
-              rgba(255, 255, 255, 0.025) 1px,
+              rgba(255,255,255,0.025) 1px,
               transparent 1px
             );
           background-size: 55px 55px;
@@ -1093,13 +1965,12 @@ export default function Home() {
         }
 
         @keyframes floatOrb {
-          0%,
-          100% {
-            transform: translate3d(0, 0, 0);
+          0%,100% {
+            transform: translate3d(0,0,0);
           }
 
           50% {
-            transform: translate3d(0, -35px, 0);
+            transform: translate3d(0,-35px,0);
           }
         }
 
@@ -1108,32 +1979,32 @@ export default function Home() {
           top: 0;
           z-index: 100;
           padding: 18px 24px;
-          background: rgba(3, 3, 10, 0.68);
+          background: rgba(3,3,10,0.68);
           backdrop-filter: blur(24px);
           -webkit-backdrop-filter: blur(24px);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+          border-bottom: 1px solid rgba(255,255,255,0.07);
         }
 
         .nav-inner {
-          width: min(1420px, 100%);
+          width: min(1420px,100%);
           margin: 0 auto;
           min-height: 68px;
           padding: 8px 10px 8px 16px;
           display: flex;
           align-items: center;
           gap: 20px;
-          border: 1px solid rgba(255, 255, 255, 0.09);
+          border: 1px solid rgba(255,255,255,0.09);
           border-radius: 24px;
           background:
             linear-gradient(
               135deg,
-              rgba(255, 255, 255, 0.075),
-              rgba(255, 255, 255, 0.025)
+              rgba(255,255,255,0.075),
+              rgba(255,255,255,0.025)
             ),
-            rgba(5, 5, 15, 0.7);
+            rgba(5,5,15,0.7);
           box-shadow:
-            0 20px 70px rgba(0, 0, 0, 0.35),
-            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            0 20px 70px rgba(0,0,0,0.35),
+            inset 0 1px 0 rgba(255,255,255,0.08);
         }
 
         .brand {
@@ -1153,14 +2024,14 @@ export default function Home() {
           background:
             linear-gradient(
               145deg,
-              rgba(164, 105, 255, 0.35),
-              rgba(26, 214, 255, 0.1)
+              rgba(164,105,255,0.35),
+              rgba(26,214,255,0.1)
             ),
             #090915;
-          border: 1px solid rgba(180, 120, 255, 0.35);
+          border: 1px solid rgba(180,120,255,0.35);
           box-shadow:
-            0 0 30px rgba(122, 76, 255, 0.22),
-            inset 0 1px 0 rgba(255, 255, 255, 0.15);
+            0 0 30px rgba(122,76,255,0.22),
+            inset 0 1px 0 rgba(255,255,255,0.15);
           transform: perspective(300px) rotateX(5deg);
         }
 
@@ -1168,13 +2039,13 @@ export default function Home() {
           font-size: 23px;
           position: relative;
           z-index: 2;
-          text-shadow: 0 0 18px rgba(135, 85, 255, 0.95);
+          text-shadow: 0 0 18px rgba(135,85,255,0.95);
         }
 
         .brand-ring {
           position: absolute;
           inset: 5px;
-          border: 1px solid rgba(0, 220, 255, 0.3);
+          border: 1px solid rgba(0,220,255,0.3);
           border-radius: 10px;
           transform: rotate(45deg);
         }
@@ -1206,21 +2077,17 @@ export default function Home() {
         }
 
         .nav-links a {
-          position: relative;
           padding: 11px 13px;
           border-radius: 12px;
           color: #9090a5;
           font-size: 13px;
           font-weight: 600;
-          transition:
-            color 0.25s ease,
-            background 0.25s ease,
-            transform 0.25s ease;
+          transition: 0.25s ease;
         }
 
         .nav-links a:hover {
           color: white;
-          background: rgba(255, 255, 255, 0.06);
+          background: rgba(255,255,255,0.06);
           transform: translateY(-2px);
         }
 
@@ -1228,14 +2095,13 @@ export default function Home() {
           color: white;
           margin-left: 4px;
           padding: 10px 15px;
-          border: 1px solid rgba(137, 88, 255, 0.4);
+          border: 1px solid rgba(137,88,255,0.4);
           background:
             linear-gradient(
               135deg,
-              rgba(116, 67, 255, 0.24),
-              rgba(0, 217, 255, 0.08)
+              rgba(116,67,255,0.24),
+              rgba(0,217,255,0.08)
             );
-          box-shadow: 0 0 22px rgba(105, 65, 255, 0.12);
         }
 
         .launch-nav span {
@@ -1256,8 +2122,8 @@ export default function Home() {
           gap: 7px;
           padding: 0 13px;
           border-radius: 12px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.035);
           color: #c9c9d7;
           font-size: 12px;
           transition: 0.25s ease;
@@ -1266,8 +2132,8 @@ export default function Home() {
         .social-button:hover {
           color: white;
           transform: translateY(-2px);
-          background: rgba(255, 255, 255, 0.08);
-          border-color: rgba(255, 255, 255, 0.16);
+          background: rgba(255,255,255,0.08);
+          border-color: rgba(255,255,255,0.16);
         }
 
         .telegram span {
@@ -1284,9 +2150,9 @@ export default function Home() {
         .logout-button {
           min-height: 40px;
           padding: 0 13px;
-          border: 1px solid rgba(255, 100, 150, 0.15);
+          border: 1px solid rgba(255,100,150,0.15);
           border-radius: 12px;
-          background: rgba(255, 80, 130, 0.06);
+          background: rgba(255,80,130,0.06);
           color: #e4a2b8;
           cursor: pointer;
           font-size: 11px;
@@ -1294,7 +2160,7 @@ export default function Home() {
         }
 
         .logout-button:hover {
-          background: rgba(255, 80, 130, 0.12);
+          background: rgba(255,80,130,0.12);
           transform: translateY(-2px);
         }
 
@@ -1303,8 +2169,8 @@ export default function Home() {
           width: 42px;
           height: 42px;
           border-radius: 12px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.04);
           cursor: pointer;
         }
 
@@ -1331,7 +2197,7 @@ export default function Home() {
         }
 
         .hero {
-          width: min(1420px, calc(100% - 48px));
+          width: min(1420px,calc(100% - 48px));
           min-height: 710px;
           margin: 0 auto;
           padding: 95px 20px 75px;
@@ -1339,7 +2205,6 @@ export default function Home() {
           grid-template-columns: 1.05fr 0.95fr;
           align-items: center;
           gap: 50px;
-          position: relative;
         }
 
         .hero-left {
@@ -1352,9 +2217,9 @@ export default function Home() {
           align-items: center;
           gap: 9px;
           padding: 8px 12px;
-          border: 1px solid rgba(0, 220, 255, 0.18);
+          border: 1px solid rgba(0,220,255,0.18);
           border-radius: 999px;
-          background: rgba(0, 220, 255, 0.045);
+          background: rgba(0,220,255,0.045);
           color: #8c9bae;
           font-size: 9px;
           letter-spacing: 0.18em;
@@ -1370,8 +2235,7 @@ export default function Home() {
         }
 
         @keyframes pulse {
-          0%,
-          100% {
+          0%,100% {
             opacity: 1;
             transform: scale(1);
           }
@@ -1396,21 +2260,21 @@ export default function Home() {
 
         .hero-title h1 {
           margin: 2px 0 0;
-          font-size: clamp(90px, 14vw, 190px);
+          font-size: clamp(90px,14vw,190px);
           line-height: 0.82;
           letter-spacing: -0.08em;
           font-weight: 900;
           background:
             linear-gradient(
               135deg,
-              #ffffff 15%,
+              #fff 15%,
               #bba2ff 47%,
               #6ce9ff 85%
             );
           -webkit-background-clip: text;
           background-clip: text;
           color: transparent;
-          text-shadow: 0 0 80px rgba(130, 80, 255, 0.18);
+          text-shadow: 0 0 80px rgba(130,80,255,0.18);
         }
 
         .title-line {
@@ -1422,21 +2286,21 @@ export default function Home() {
 
         .title-line span {
           padding: 8px 12px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255,255,255,0.08);
           border-radius: 10px;
-          background: rgba(255, 255, 255, 0.025);
+          background: rgba(255,255,255,0.025);
           color: #aaaabd;
           font-size: 12px;
           letter-spacing: 0.08em;
         }
 
         .title-line span:nth-child(2) {
-          border-color: rgba(0, 220, 255, 0.15);
+          border-color: rgba(0,220,255,0.15);
           color: #89dff0;
         }
 
         .title-line span:nth-child(3) {
-          border-color: rgba(158, 98, 255, 0.2);
+          border-color: rgba(158,98,255,0.2);
           color: #bd9dff;
         }
 
@@ -1468,24 +2332,21 @@ export default function Home() {
           font-size: 12px;
           font-weight: 800;
           letter-spacing: 0.04em;
-          transition:
-            transform 0.25s ease,
-            box-shadow 0.25s ease,
-            border 0.25s ease;
+          transition: 0.25s ease;
         }
 
         .primary-button {
           color: white;
-          border: 1px solid rgba(158, 111, 255, 0.55);
+          border: 1px solid rgba(158,111,255,0.55);
           background:
             linear-gradient(
               135deg,
-              rgba(119, 65, 255, 0.8),
-              rgba(55, 112, 255, 0.58)
+              rgba(119,65,255,0.8),
+              rgba(55,112,255,0.58)
             );
           box-shadow:
-            0 16px 45px rgba(103, 55, 255, 0.2),
-            inset 0 1px 0 rgba(255, 255, 255, 0.25);
+            0 16px 45px rgba(103,55,255,0.2),
+            inset 0 1px 0 rgba(255,255,255,0.25);
         }
 
         .primary-button strong,
@@ -1494,25 +2355,25 @@ export default function Home() {
         }
 
         .secondary-button {
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(255, 255, 255, 0.035);
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.035);
           color: #c8c8d4;
         }
 
         .primary-button:hover,
         .secondary-button:hover {
-          transform: translateY(-4px) perspective(400px) rotateX(3deg);
+          transform: translateY(-4px);
         }
 
         .primary-button:hover {
           box-shadow:
-            0 22px 55px rgba(103, 55, 255, 0.32),
-            inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            0 22px 55px rgba(103,55,255,0.32),
+            inset 0 1px 0 rgba(255,255,255,0.3);
         }
 
         .secondary-button:hover {
-          border-color: rgba(255, 255, 255, 0.2);
-          box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
+          border-color: rgba(255,255,255,0.2);
+          box-shadow: 0 18px 40px rgba(0,0,0,0.3);
         }
 
         .hero-mini-stats {
@@ -1530,7 +2391,6 @@ export default function Home() {
 
         .hero-mini-stats strong {
           font-size: 19px;
-          letter-spacing: 0.04em;
         }
 
         .hero-mini-stats span {
@@ -1542,7 +2402,7 @@ export default function Home() {
         .stat-divider {
           width: 1px;
           height: 30px;
-          background: rgba(255, 255, 255, 0.1);
+          background: rgba(255,255,255,0.1);
         }
 
         .hero-visual {
@@ -1558,13 +2418,13 @@ export default function Home() {
           height: 360px;
           position: absolute;
           border-radius: 50%;
-          background: rgba(117, 69, 255, 0.16);
+          background: rgba(117,69,255,0.16);
           filter: blur(80px);
         }
 
         .visual-orbit {
           position: absolute;
-          border: 1px solid rgba(150, 105, 255, 0.18);
+          border: 1px solid rgba(150,105,255,0.18);
           border-radius: 50%;
           transform: rotateX(68deg) rotateZ(25deg);
         }
@@ -1578,16 +2438,14 @@ export default function Home() {
         .orbit-b {
           width: 390px;
           height: 390px;
-          transform: rotateX(68deg) rotateZ(-40deg);
-          border-color: rgba(0, 220, 255, 0.14);
+          border-color: rgba(0,220,255,0.14);
           animation: orbitSpinReverse 11s linear infinite;
         }
 
         .orbit-c {
           width: 540px;
           height: 280px;
-          border-color: rgba(255, 255, 255, 0.08);
-          transform: rotateX(72deg) rotateZ(5deg);
+          border-color: rgba(255,255,255,0.08);
           animation: orbitSpin 19s linear infinite;
         }
 
@@ -1621,34 +2479,39 @@ export default function Home() {
           align-items: center;
           justify-content: center;
           border-radius: 48% 48% 42% 42%;
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          border: 1px solid rgba(255,255,255,0.12);
           background:
             radial-gradient(
               circle at 50% 35%,
-              rgba(150, 90, 255, 0.2),
+              rgba(150,90,255,0.2),
               transparent 40%
             ),
             linear-gradient(
               145deg,
-              rgba(255, 255, 255, 0.09),
-              rgba(255, 255, 255, 0.025)
+              rgba(255,255,255,0.09),
+              rgba(255,255,255,0.025)
             );
           box-shadow:
-            0 35px 100px rgba(0, 0, 0, 0.55),
-            0 0 90px rgba(107, 67, 255, 0.17),
-            inset 0 1px 0 rgba(255, 255, 255, 0.15);
+            0 35px 100px rgba(0,0,0,0.55),
+            0 0 90px rgba(107,67,255,0.17),
+            inset 0 1px 0 rgba(255,255,255,0.15);
           transform: rotateY(-8deg) rotateX(4deg);
           animation: coreFloat 5s ease-in-out infinite;
         }
 
         @keyframes coreFloat {
-          0%,
-          100% {
-            transform: rotateY(-8deg) rotateX(4deg) translateY(0);
+          0%,100% {
+            transform:
+              rotateY(-8deg)
+              rotateX(4deg)
+              translateY(0);
           }
 
           50% {
-            transform: rotateY(-8deg) rotateX(4deg) translateY(-12px);
+            transform:
+              rotateY(-8deg)
+              rotateX(4deg)
+              translateY(-12px);
           }
         }
 
@@ -1673,8 +2536,8 @@ export default function Home() {
               #5c38c8 100%
             );
           box-shadow:
-            0 15px 45px rgba(108, 66, 255, 0.38),
-            inset 0 2px 3px rgba(255, 255, 255, 0.35);
+            0 15px 45px rgba(108,66,255,0.38),
+            inset 0 2px 3px rgba(255,255,255,0.35);
         }
 
         .fox-ear {
@@ -1682,9 +2545,17 @@ export default function Home() {
           height: 75px;
           position: absolute;
           top: 0;
-          background: linear-gradient(145deg, #b69cff, #6840dc);
-          clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
-          filter: drop-shadow(0 10px 20px rgba(92, 52, 220, 0.25));
+          background:
+            linear-gradient(
+              145deg,
+              #b69cff,
+              #6840dc
+            );
+          clip-path: polygon(
+            50% 0%,
+            100% 100%,
+            0% 100%
+          );
         }
 
         .left-ear {
@@ -1703,8 +2574,8 @@ export default function Home() {
           position: absolute;
           top: 58px;
           border-radius: 50%;
-          background: #ffffff;
-          box-shadow: 0 0 13px rgba(255, 255, 255, 0.9);
+          background: #fff;
+          box-shadow: 0 0 13px rgba(255,255,255,0.9);
         }
 
         .eye-left {
@@ -1736,7 +2607,6 @@ export default function Home() {
           font-size: 25px;
           font-weight: 900;
           letter-spacing: 0.25em;
-          margin-left: 0.25em;
         }
 
         .fox-core-text small {
@@ -1754,11 +2624,11 @@ export default function Home() {
           display: flex;
           align-items: center;
           gap: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.11);
+          border: 1px solid rgba(255,255,255,0.11);
           border-radius: 16px;
-          background: rgba(9, 9, 20, 0.72);
+          background: rgba(9,9,20,0.72);
           backdrop-filter: blur(18px);
-          box-shadow: 0 20px 45px rgba(0, 0, 0, 0.32);
+          box-shadow: 0 20px 45px rgba(0,0,0,0.32);
         }
 
         .floating-card > span {
@@ -1767,7 +2637,7 @@ export default function Home() {
           display: grid;
           place-items: center;
           border-radius: 10px;
-          background: rgba(127, 74, 255, 0.15);
+          background: rgba(127,74,255,0.15);
           color: #bb9cff;
         }
 
@@ -1785,7 +2655,6 @@ export default function Home() {
 
         .floating-card strong {
           font-size: 11px;
-          letter-spacing: 0.08em;
         }
 
         .card-top {
@@ -1801,8 +2670,7 @@ export default function Home() {
         }
 
         @keyframes floatCard {
-          0%,
-          100% {
+          0%,100% {
             transform: translateY(0);
           }
 
@@ -1816,7 +2684,7 @@ export default function Home() {
         .daily-section,
         .activities-section,
         .ecosystem-section {
-          width: min(1200px, calc(100% - 48px));
+          width: min(1200px,calc(100% - 48px));
           margin: 0 auto;
         }
 
@@ -1830,18 +2698,18 @@ export default function Home() {
           display: flex;
           align-items: center;
           gap: 17px;
-          border: 1px solid rgba(255, 255, 255, 0.09);
+          border: 1px solid rgba(255,255,255,0.09);
           border-radius: 23px;
           background:
             linear-gradient(
               135deg,
-              rgba(255, 255, 255, 0.07),
-              rgba(255, 255, 255, 0.025)
+              rgba(255,255,255,0.07),
+              rgba(255,255,255,0.025)
             ),
-            rgba(7, 7, 17, 0.78);
+            rgba(7,7,17,0.78);
           box-shadow:
-            0 25px 70px rgba(0, 0, 0, 0.28),
-            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            0 25px 70px rgba(0,0,0,0.28),
+            inset 0 1px 0 rgba(255,255,255,0.08);
         }
 
         .profile-avatar {
@@ -1856,10 +2724,9 @@ export default function Home() {
           background:
             linear-gradient(
               135deg,
-              rgba(125, 70, 255, 0.7),
-              rgba(0, 207, 255, 0.35)
+              rgba(125,70,255,0.7),
+              rgba(0,207,255,0.35)
             );
-          box-shadow: 0 10px 30px rgba(101, 58, 255, 0.2);
         }
 
         .profile-info {
@@ -1890,14 +2757,14 @@ export default function Home() {
         .profile-points {
           padding: 5px 25px;
           text-align: right;
-          border-left: 1px solid rgba(255, 255, 255, 0.08);
+          border-left: 1px solid rgba(255,255,255,0.08);
         }
 
         .profile-points strong {
           display: block;
           margin: 3px 0;
           font-size: 25px;
-          background: linear-gradient(90deg, #ffffff, #9e83ff);
+          background: linear-gradient(90deg,#fff,#9e83ff);
           -webkit-background-clip: text;
           background-clip: text;
           color: transparent;
@@ -1915,20 +2782,20 @@ export default function Home() {
           display: grid;
           place-items: center;
           border-radius: 13px;
-          background: rgba(255, 255, 255, 0.04);
+          background: rgba(255,255,255,0.04);
           color: #aaaabe;
           font-size: 20px;
           transition: 0.25s ease;
         }
 
         .profile-arrow:hover {
-          background: rgba(129, 76, 255, 0.15);
+          background: rgba(129,76,255,0.15);
           color: white;
           transform: translateX(3px);
         }
 
         .message-wrap {
-          width: min(1000px, calc(100% - 48px));
+          width: min(1000px,calc(100% - 48px));
           margin: 0 auto 45px;
         }
 
@@ -1938,9 +2805,9 @@ export default function Home() {
           display: flex;
           align-items: center;
           gap: 11px;
-          border: 1px solid rgba(115, 77, 255, 0.2);
+          border: 1px solid rgba(115,77,255,0.2);
           border-radius: 15px;
-          background: rgba(111, 65, 255, 0.07);
+          background: rgba(111,65,255,0.07);
           color: #c5bddc;
           font-size: 12px;
         }
@@ -1948,15 +2815,114 @@ export default function Home() {
         .message-icon {
           width: 30px;
           height: 30px;
+          flex: 0 0 30px;
           display: grid;
           place-items: center;
           border-radius: 9px;
-          background: rgba(129, 79, 255, 0.16);
+          background: rgba(129,79,255,0.16);
           color: #ba9cff;
         }
 
-        .message button {
+        .message-content {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+
+        .message-content strong {
+          color: #c1a8ff;
+          font-size: 9px;
+          letter-spacing: 0.16em;
+        }
+
+        .message-content > span {
+          color: #a4a0b8;
+          font-size: 12px;
+          line-height: 1.6;
+        }
+
+        .message-email {
+          padding: 18px;
+          border-color: rgba(125,85,255,0.3);
+          background:
+            radial-gradient(
+              circle at 0% 50%,
+              rgba(119,68,255,0.13),
+              transparent 45%
+            ),
+            rgba(13,10,30,0.9);
+          box-shadow:
+            0 20px 60px rgba(80,40,180,0.12),
+            inset 0 1px 0 rgba(255,255,255,0.07);
+        }
+
+        .message-email .message-icon {
+          width: 42px;
+          height: 42px;
+          flex: 0 0 42px;
+          border-radius: 13px;
+          background:
+            linear-gradient(
+              135deg,
+              rgba(132,76,255,0.28),
+              rgba(0,214,255,0.1)
+            );
+          border: 1px solid rgba(145,90,255,0.25);
+          color: #c2a8ff;
+          font-size: 19px;
+        }
+
+        .email-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 9px;
+        }
+
+        .resend-button,
+        .continue-login-button {
+          min-height: 35px;
+          padding: 0 12px;
+          border-radius: 9px;
+          cursor: pointer;
+          font-size: 8px;
+          font-weight: 800;
+          transition: 0.25s ease;
+        }
+
+        .resend-button {
+          border: 1px solid rgba(131,78,255,0.3);
+          background: rgba(116,65,255,0.12);
+          color: #bda5ff;
+        }
+
+        .resend-button:hover:not(:disabled) {
+          background: rgba(116,65,255,0.22);
+          transform: translateY(-2px);
+        }
+
+        .continue-login-button {
+          border: 1px solid rgba(255,255,255,0.09);
+          background: rgba(255,255,255,0.04);
+          color: #a7a7bb;
+        }
+
+        .continue-login-button:hover {
+          color: white;
+          background: rgba(255,255,255,0.08);
+          transform: translateY(-2px);
+        }
+
+        .resend-button:disabled {
+          opacity: 0.5;
+          cursor: wait;
+        }
+
+        .message-close {
           margin-left: auto;
+          align-self: flex-start;
           border: 0;
           background: transparent;
           color: #77778d;
@@ -1968,8 +2934,7 @@ export default function Home() {
           margin-bottom: 28px;
         }
 
-        .section-heading > span,
-        .section-heading span:first-child {
+        .section-heading > span {
           color: #73738b;
           font-size: 9px;
           font-weight: 800;
@@ -1978,7 +2943,7 @@ export default function Home() {
 
         .section-heading h2 {
           margin: 8px 0 7px;
-          font-size: clamp(27px, 4vw, 42px);
+          font-size: clamp(27px,4vw,42px);
           letter-spacing: -0.035em;
         }
 
@@ -1999,18 +2964,18 @@ export default function Home() {
           overflow: hidden;
           display: grid;
           grid-template-columns: 0.7fr 1.3fr;
-          border: 1px solid rgba(255, 255, 255, 0.09);
+          border: 1px solid rgba(255,255,255,0.09);
           border-radius: 30px;
           background:
             radial-gradient(
               circle at 15% 50%,
-              rgba(121, 69, 255, 0.15),
+              rgba(121,69,255,0.15),
               transparent 35%
             ),
-            rgba(7, 7, 17, 0.78);
+            rgba(7,7,17,0.78);
           box-shadow:
-            0 30px 90px rgba(0, 0, 0, 0.35),
-            inset 0 1px 0 rgba(255, 255, 255, 0.07);
+            0 30px 90px rgba(0,0,0,0.35),
+            inset 0 1px 0 rgba(255,255,255,0.07);
         }
 
         .auth-decoration {
@@ -2020,17 +2985,17 @@ export default function Home() {
           background:
             radial-gradient(
               circle,
-              rgba(112, 64, 255, 0.22),
+              rgba(112,64,255,0.22),
               transparent 55%
             ),
-            rgba(255, 255, 255, 0.015);
-          border-right: 1px solid rgba(255, 255, 255, 0.06);
+            rgba(255,255,255,0.015);
+          border-right: 1px solid rgba(255,255,255,0.06);
         }
 
         .auth-ring {
           position: absolute;
           border-radius: 50%;
-          border: 1px solid rgba(157, 103, 255, 0.2);
+          border: 1px solid rgba(157,103,255,0.2);
         }
 
         .ring-one {
@@ -2038,7 +3003,7 @@ export default function Home() {
           height: 330px;
           left: 50%;
           top: 50%;
-          transform: translate(-50%, -50%);
+          transform: translate(-50%,-50%);
         }
 
         .ring-two {
@@ -2046,8 +3011,8 @@ export default function Home() {
           height: 220px;
           left: 50%;
           top: 50%;
-          transform: translate(-50%, -50%) rotate(30deg);
-          border-color: rgba(0, 219, 255, 0.15);
+          transform: translate(-50%,-50%) rotate(30deg);
+          border-color: rgba(0,219,255,0.15);
         }
 
         .auth-symbol {
@@ -2056,7 +3021,7 @@ export default function Home() {
           position: absolute;
           left: 50%;
           top: 50%;
-          transform: translate(-50%, -50%);
+          transform: translate(-50%,-50%);
           display: grid;
           place-items: center;
           border-radius: 28px;
@@ -2064,23 +3029,25 @@ export default function Home() {
           background:
             linear-gradient(
               145deg,
-              rgba(143, 87, 255, 0.32),
-              rgba(0, 210, 255, 0.08)
+              rgba(143,87,255,0.32),
+              rgba(0,210,255,0.08)
             );
-          border: 1px solid rgba(170, 110, 255, 0.3);
-          box-shadow: 0 0 70px rgba(116, 69, 255, 0.25);
-          transform-style: preserve-3d;
+          border: 1px solid rgba(170,110,255,0.3);
+          box-shadow: 0 0 70px rgba(116,69,255,0.25);
           animation: symbolFloat 4s ease-in-out infinite;
         }
 
         @keyframes symbolFloat {
-          0%,
-          100% {
-            transform: translate(-50%, -50%) rotateY(0deg);
+          0%,100% {
+            transform:
+              translate(-50%,-50%)
+              rotateY(0deg);
           }
 
           50% {
-            transform: translate(-50%, -54%) rotateY(12deg);
+            transform:
+              translate(-50%,-54%)
+              rotateY(12deg);
           }
         }
 
@@ -2093,9 +3060,9 @@ export default function Home() {
           gap: 4px;
           padding: 4px;
           width: max-content;
-          border: 1px solid rgba(255, 255, 255, 0.07);
+          border: 1px solid rgba(255,255,255,0.07);
           border-radius: 13px;
-          background: rgba(255, 255, 255, 0.025);
+          background: rgba(255,255,255,0.025);
         }
 
         .auth-tabs button {
@@ -2112,8 +3079,7 @@ export default function Home() {
 
         .auth-tabs button.active {
           color: white;
-          background: rgba(133, 78, 255, 0.22);
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          background: rgba(133,78,255,0.22);
         }
 
         .auth-title {
@@ -2141,7 +3107,7 @@ export default function Home() {
           gap: 8px;
         }
 
-        .auth-form label span {
+        .auth-form label > span {
           color: #66667a;
           font-size: 8px;
           letter-spacing: 0.18em;
@@ -2151,10 +3117,10 @@ export default function Home() {
           width: 100%;
           height: 50px;
           padding: 0 15px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255,255,255,0.08);
           outline: none;
           border-radius: 12px;
-          background: rgba(255, 255, 255, 0.035);
+          background: rgba(255,255,255,0.035);
           color: white;
           transition: 0.25s ease;
         }
@@ -2164,9 +3130,115 @@ export default function Home() {
         }
 
         .auth-form input:focus {
-          border-color: rgba(131, 78, 255, 0.55);
-          box-shadow: 0 0 0 3px rgba(118, 66, 255, 0.08);
-          background: rgba(255, 255, 255, 0.05);
+          border-color: rgba(131,78,255,0.55);
+          box-shadow: 0 0 0 3px rgba(118,66,255,0.08);
+          background: rgba(255,255,255,0.05);
+        }
+
+        /*
+         * USERNAME UI
+         */
+
+        .username-input-wrap {
+          position: relative;
+        }
+
+        .username-input-wrap input {
+          padding-right: 48px;
+        }
+
+        .username-spinner,
+        .username-check,
+        .username-cross {
+          position: absolute;
+          top: 50%;
+          right: 15px;
+          transform: translateY(-50%);
+          pointer-events: none;
+          font-size: 16px;
+          font-weight: 900;
+        }
+
+        .username-spinner {
+          color: #8e8ea6;
+          animation: usernameSpin 1s linear infinite;
+        }
+
+        .username-check {
+          color: #62e5ae;
+          text-shadow: 0 0 12px rgba(98,229,174,0.4);
+        }
+
+        .username-cross {
+          color: #ff6d93;
+          text-shadow: 0 0 12px rgba(255,109,147,0.35);
+        }
+
+        @keyframes usernameSpin {
+          from {
+            transform:
+              translateY(-50%)
+              rotate(0deg);
+          }
+
+          to {
+            transform:
+              translateY(-50%)
+              rotate(360deg);
+          }
+        }
+
+        .username-meta {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          margin-top: -2px;
+          color: #505064;
+          font-size: 8px;
+          letter-spacing: 0.05em;
+        }
+
+        .username-meta .limit-reached {
+          color: #a98cff;
+        }
+
+        .username-status {
+          margin-top: -2px;
+          padding: 9px 11px;
+          border-radius: 9px;
+          font-size: 9px;
+          line-height: 1.5;
+          border: 1px solid transparent;
+        }
+
+        .username-status.available {
+          color: #63e2ae;
+          border-color: rgba(72,222,161,0.16);
+          background: rgba(72,222,161,0.055);
+        }
+
+        .username-status.taken {
+          color: #ff7b9d;
+          border-color: rgba(255,92,130,0.17);
+          background: rgba(255,70,120,0.055);
+        }
+
+        .username-status.invalid {
+          color: #ffb37c;
+          border-color: rgba(255,170,100,0.14);
+          background: rgba(255,150,80,0.045);
+        }
+
+        .username-status.checking {
+          color: #8d8da5;
+          border-color: rgba(255,255,255,0.07);
+          background: rgba(255,255,255,0.025);
+        }
+
+        .username-status.error {
+          color: #ff9a9a;
+          border-color: rgba(255,100,100,0.15);
+          background: rgba(255,70,70,0.045);
         }
 
         .auth-submit {
@@ -2176,13 +3248,13 @@ export default function Home() {
           align-items: center;
           justify-content: space-between;
           padding: 0 17px 0 19px;
-          border: 1px solid rgba(143, 91, 255, 0.4);
+          border: 1px solid rgba(143,91,255,0.4);
           border-radius: 13px;
           background:
             linear-gradient(
               135deg,
-              rgba(116, 64, 255, 0.65),
-              rgba(49, 113, 255, 0.48)
+              rgba(116,64,255,0.65),
+              rgba(49,113,255,0.48)
             );
           color: white;
           cursor: pointer;
@@ -2193,12 +3265,12 @@ export default function Home() {
 
         .auth-submit:hover:not(:disabled) {
           transform: translateY(-3px);
-          box-shadow: 0 15px 35px rgba(96, 54, 255, 0.2);
+          box-shadow: 0 15px 35px rgba(96,54,255,0.2);
         }
 
         .auth-submit:disabled {
-          opacity: 0.6;
-          cursor: wait;
+          opacity: 0.45;
+          cursor: not-allowed;
         }
 
         .auth-submit strong {
@@ -2215,16 +3287,16 @@ export default function Home() {
           display: flex;
           align-items: center;
           gap: 18px;
-          border: 1px solid rgba(255, 255, 255, 0.09);
+          border: 1px solid rgba(255,255,255,0.09);
           border-radius: 24px;
           background:
             linear-gradient(
               135deg,
-              rgba(255, 255, 255, 0.065),
-              rgba(255, 255, 255, 0.02)
+              rgba(255,255,255,0.065),
+              rgba(255,255,255,0.02)
             ),
-            rgba(7, 7, 17, 0.78);
-          box-shadow: 0 25px 65px rgba(0, 0, 0, 0.25);
+            rgba(7,7,17,0.78);
+          box-shadow: 0 25px 65px rgba(0,0,0,0.25);
         }
 
         .daily-icon {
@@ -2237,12 +3309,11 @@ export default function Home() {
           background:
             linear-gradient(
               145deg,
-              rgba(129, 74, 255, 0.25),
-              rgba(0, 215, 255, 0.08)
+              rgba(129,74,255,0.25),
+              rgba(0,215,255,0.08)
             );
-          border: 1px solid rgba(145, 90, 255, 0.2);
+          border: 1px solid rgba(145,90,255,0.2);
           font-size: 25px;
-          box-shadow: 0 0 35px rgba(112, 66, 255, 0.13);
         }
 
         .daily-content {
@@ -2269,7 +3340,7 @@ export default function Home() {
         .daily-reward {
           padding: 0 25px;
           text-align: right;
-          border-left: 1px solid rgba(255, 255, 255, 0.07);
+          border-left: 1px solid rgba(255,255,255,0.07);
         }
 
         .daily-reward span,
@@ -2291,9 +3362,9 @@ export default function Home() {
           min-width: 130px;
           height: 46px;
           padding: 0 15px;
-          border: 1px solid rgba(134, 79, 255, 0.4);
+          border: 1px solid rgba(134,79,255,0.4);
           border-radius: 12px;
-          background: rgba(118, 67, 255, 0.16);
+          background: rgba(118,67,255,0.16);
           color: white;
           cursor: pointer;
           font-size: 10px;
@@ -2303,13 +3374,12 @@ export default function Home() {
 
         .daily-button:hover:not(:disabled) {
           transform: translateY(-3px);
-          background: rgba(118, 67, 255, 0.28);
-          box-shadow: 0 14px 30px rgba(105, 61, 255, 0.16);
+          background: rgba(118,67,255,0.28);
         }
 
         .daily-button.completed {
-          border-color: rgba(75, 230, 169, 0.2);
-          background: rgba(75, 230, 169, 0.07);
+          border-color: rgba(75,230,169,0.2);
+          background: rgba(75,230,169,0.07);
           color: #6ce3b1;
         }
 
@@ -2330,9 +3400,9 @@ export default function Home() {
         .activity-counter {
           min-width: 100px;
           padding: 12px 15px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255,255,255,0.08);
           border-radius: 13px;
-          background: rgba(255, 255, 255, 0.025);
+          background: rgba(255,255,255,0.025);
           text-align: right;
         }
 
@@ -2349,7 +3419,10 @@ export default function Home() {
 
         .activity-grid {
           display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-columns: repeat(
+            2,
+            minmax(0,1fr)
+          );
           gap: 16px;
         }
 
@@ -2358,29 +3431,26 @@ export default function Home() {
           position: relative;
           padding: 22px;
           overflow: hidden;
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255,255,255,0.08);
           border-radius: 23px;
           background:
             radial-gradient(
               circle at 100% 0%,
-              rgba(111, 63, 255, 0.1),
+              rgba(111,63,255,0.1),
               transparent 35%
             ),
-            rgba(7, 7, 17, 0.76);
-          transition:
-            transform 0.3s ease,
-            border 0.3s ease,
-            box-shadow 0.3s ease;
+            rgba(7,7,17,0.76);
+          transition: 0.3s ease;
         }
 
         .activity-card:hover {
-          transform: translateY(-6px) perspective(800px) rotateX(1deg);
-          border-color: rgba(137, 86, 255, 0.2);
-          box-shadow: 0 25px 65px rgba(0, 0, 0, 0.32);
+          transform: translateY(-6px);
+          border-color: rgba(137,86,255,0.2);
+          box-shadow: 0 25px 65px rgba(0,0,0,0.32);
         }
 
         .activity-card.is-claimed {
-          border-color: rgba(77, 223, 165, 0.16);
+          border-color: rgba(77,223,165,0.16);
         }
 
         .activity-number {
@@ -2389,7 +3459,6 @@ export default function Home() {
           right: 18px;
           color: #38384a;
           font-size: 9px;
-          letter-spacing: 0.12em;
         }
 
         .activity-top {
@@ -2407,10 +3476,10 @@ export default function Home() {
           background:
             linear-gradient(
               145deg,
-              rgba(133, 77, 255, 0.2),
-              rgba(0, 208, 255, 0.06)
+              rgba(133,77,255,0.2),
+              rgba(0,208,255,0.06)
             );
-          border: 1px solid rgba(139, 84, 255, 0.16);
+          border: 1px solid rgba(139,84,255,0.16);
           font-size: 19px;
         }
 
@@ -2441,7 +3510,7 @@ export default function Home() {
         }
 
         .activity-body h3 {
-          margin: 8px 0 8px;
+          margin: 8px 0;
           font-size: 18px;
         }
 
@@ -2456,7 +3525,7 @@ export default function Home() {
         .activity-footer {
           min-height: 55px;
           padding-top: 16px;
-          border-top: 1px solid rgba(255, 255, 255, 0.06);
+          border-top: 1px solid rgba(255,255,255,0.06);
           display: flex;
           align-items: center;
           gap: 8px;
@@ -2478,15 +3547,14 @@ export default function Home() {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          border: 1px solid rgba(255, 255, 255, 0.09);
-          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255,255,255,0.09);
+          background: rgba(255,255,255,0.04);
           color: #c7c7d5;
         }
 
         .activity-button:hover:not(:disabled) {
           color: white;
-          border-color: rgba(255, 255, 255, 0.16);
-          background: rgba(255, 255, 255, 0.07);
+          background: rgba(255,255,255,0.07);
           transform: translateY(-2px);
         }
 
@@ -2496,14 +3564,14 @@ export default function Home() {
 
         .claim-button {
           padding: 0 15px;
-          border: 1px solid rgba(132, 77, 255, 0.28);
-          background: rgba(116, 65, 255, 0.13);
+          border: 1px solid rgba(132,77,255,0.28);
+          background: rgba(116,65,255,0.13);
           color: #b9a0ff;
         }
 
         .claim-button:hover:not(:disabled) {
           transform: translateY(-2px);
-          background: rgba(116, 65, 255, 0.22);
+          background: rgba(116,65,255,0.22);
         }
 
         .timer-box,
@@ -2520,9 +3588,9 @@ export default function Home() {
           display: grid;
           place-items: center;
           flex: 0 0 42px;
-          border: 1px solid rgba(128, 76, 255, 0.28);
+          border: 1px solid rgba(128,76,255,0.28);
           border-radius: 50%;
-          background: rgba(117, 67, 255, 0.1);
+          background: rgba(117,67,255,0.1);
           color: #c0a7ff;
           font-size: 11px;
           font-weight: 800;
@@ -2554,8 +3622,8 @@ export default function Home() {
           display: grid;
           place-items: center;
           border-radius: 50%;
-          background: rgba(73, 224, 163, 0.09);
-          border: 1px solid rgba(73, 224, 163, 0.18);
+          background: rgba(73,224,163,0.09);
+          border: 1px solid rgba(73,224,163,0.18);
           color: #67dfae;
         }
 
@@ -2563,9 +3631,9 @@ export default function Home() {
           grid-column: 1 / -1;
           padding: 70px 30px;
           text-align: center;
-          border: 1px dashed rgba(255, 255, 255, 0.1);
+          border: 1px dashed rgba(255,255,255,0.1);
           border-radius: 24px;
-          background: rgba(255, 255, 255, 0.015);
+          background: rgba(255,255,255,0.015);
         }
 
         .empty-icon {
@@ -2575,7 +3643,7 @@ export default function Home() {
           display: grid;
           place-items: center;
           border-radius: 18px;
-          background: rgba(123, 72, 255, 0.1);
+          background: rgba(123,72,255,0.1);
           color: #a889ff;
           font-size: 25px;
         }
@@ -2602,20 +3670,20 @@ export default function Home() {
           display: grid;
           grid-template-columns: 1.1fr 0.9fr;
           align-items: center;
-          border: 1px solid rgba(255, 255, 255, 0.09);
+          border: 1px solid rgba(255,255,255,0.09);
           border-radius: 32px;
           background:
             radial-gradient(
               circle at 25% 50%,
-              rgba(115, 66, 255, 0.18),
+              rgba(115,66,255,0.18),
               transparent 45%
             ),
             linear-gradient(
               135deg,
-              rgba(255, 255, 255, 0.06),
-              rgba(255, 255, 255, 0.015)
+              rgba(255,255,255,0.06),
+              rgba(255,255,255,0.015)
             );
-          box-shadow: 0 35px 90px rgba(0, 0, 0, 0.3);
+          box-shadow: 0 35px 90px rgba(0,0,0,0.3);
         }
 
         .ecosystem-content {
@@ -2632,7 +3700,7 @@ export default function Home() {
 
         .ecosystem-content h2 {
           margin: 13px 0 18px;
-          font-size: clamp(32px, 5vw, 54px);
+          font-size: clamp(32px,5vw,54px);
           line-height: 1.05;
           letter-spacing: -0.045em;
         }
@@ -2662,23 +3730,23 @@ export default function Home() {
           display: inline-flex;
           align-items: center;
           gap: 20px;
-          border: 1px solid rgba(133, 78, 255, 0.32);
+          border: 1px solid rgba(133,78,255,0.32);
           border-radius: 12px;
-          background: rgba(118, 67, 255, 0.13);
+          background: rgba(118,67,255,0.13);
           font-size: 10px;
           font-weight: 800;
           transition: 0.25s ease;
         }
 
         .eco-button.outline {
-          border-color: rgba(255, 255, 255, 0.1);
-          background: rgba(255, 255, 255, 0.03);
+          border-color: rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.03);
           color: #b0b0c1;
         }
 
         .eco-button:hover {
           transform: translateY(-3px);
-          box-shadow: 0 15px 35px rgba(91, 52, 255, 0.16);
+          box-shadow: 0 15px 35px rgba(91,52,255,0.16);
         }
 
         .ecosystem-visual {
@@ -2691,7 +3759,7 @@ export default function Home() {
         .eco-orbit {
           position: absolute;
           border-radius: 50%;
-          border: 1px solid rgba(137, 82, 255, 0.22);
+          border: 1px solid rgba(137,82,255,0.22);
           transform: rotateX(70deg) rotateZ(25deg);
           animation: orbitSpin 13s linear infinite;
         }
@@ -2704,7 +3772,7 @@ export default function Home() {
         .eco-orbit-two {
           width: 220px;
           height: 220px;
-          border-color: rgba(0, 214, 255, 0.16);
+          border-color: rgba(0,214,255,0.16);
           animation-duration: 9s;
           animation-direction: reverse;
         }
@@ -2716,17 +3784,15 @@ export default function Home() {
           display: grid;
           place-items: center;
           border-radius: 30px;
-          border: 1px solid rgba(157, 100, 255, 0.35);
+          border: 1px solid rgba(157,100,255,0.35);
           background:
             linear-gradient(
               145deg,
-              rgba(126, 71, 255, 0.35),
-              rgba(0, 205, 255, 0.08)
+              rgba(126,71,255,0.35),
+              rgba(0,205,255,0.08)
             ),
-            rgba(10, 10, 25, 0.8);
-          box-shadow:
-            0 0 80px rgba(109, 64, 255, 0.22),
-            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            rgba(10,10,25,0.8);
+          box-shadow: 0 0 80px rgba(109,64,255,0.22);
           font-size: 45px;
           animation: coreFloat 5s ease-in-out infinite;
         }
@@ -2738,8 +3804,8 @@ export default function Home() {
           display: grid;
           place-items: center;
           border-radius: 50%;
-          border: 1px solid rgba(255, 255, 255, 0.13);
-          background: rgba(7, 7, 18, 0.85);
+          border: 1px solid rgba(255,255,255,0.13);
+          background: rgba(7,7,18,0.85);
           color: #8c8ca1;
           font-size: 7px;
         }
@@ -2760,14 +3826,14 @@ export default function Home() {
         }
 
         .footer {
-          width: min(1420px, calc(100% - 48px));
+          width: min(1420px,calc(100% - 48px));
           margin: 0 auto;
           padding: 25px 0 30px;
           display: grid;
           grid-template-columns: 1fr auto auto;
           align-items: center;
           gap: 30px;
-          border-top: 1px solid rgba(255, 255, 255, 0.07);
+          border-top: 1px solid rgba(255,255,255,0.07);
         }
 
         .footer-brand {
@@ -2828,7 +3894,7 @@ export default function Home() {
         .footer-bottom {
           grid-column: 1 / -1;
           padding-top: 18px;
-          border-top: 1px solid rgba(255, 255, 255, 0.05);
+          border-top: 1px solid rgba(255,255,255,0.05);
           display: flex;
           justify-content: space-between;
           color: #454556;
@@ -2915,11 +3981,11 @@ export default function Home() {
             flex-direction: column;
             align-items: stretch;
             padding: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.09);
+            border: 1px solid rgba(255,255,255,0.09);
             border-radius: 20px;
-            background: rgba(6, 6, 16, 0.94);
+            background: rgba(6,6,16,0.94);
             backdrop-filter: blur(25px);
-            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 25px 70px rgba(0,0,0,0.5);
           }
 
           .nav-links.mobile-show {
@@ -2965,7 +4031,7 @@ export default function Home() {
           .daily-section,
           .activities-section,
           .ecosystem-section {
-            width: min(100% - 28px, 1200px);
+            width: calc(100% - 28px);
           }
 
           .hero {
@@ -2974,7 +4040,7 @@ export default function Home() {
           }
 
           .hero-title h1 {
-            font-size: clamp(80px, 25vw, 150px);
+            font-size: clamp(80px,25vw,150px);
           }
 
           .hero-description {
@@ -3023,7 +4089,7 @@ export default function Home() {
             width: 100%;
             padding: 15px 0 0;
             border-left: 0;
-            border-top: 1px solid rgba(255, 255, 255, 0.07);
+            border-top: 1px solid rgba(255,255,255,0.07);
             text-align: left;
           }
 
@@ -3043,7 +4109,7 @@ export default function Home() {
           .auth-decoration {
             min-height: 170px;
             border-right: 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
           }
 
           .ring-one {
@@ -3079,7 +4145,7 @@ export default function Home() {
             padding: 14px 0 0;
             text-align: left;
             border-left: 0;
-            border-top: 1px solid rgba(255, 255, 255, 0.07);
+            border-top: 1px solid rgba(255,255,255,0.07);
           }
 
           .daily-reward strong {
@@ -3125,6 +4191,18 @@ export default function Home() {
 
           .footer-bottom {
             order: 4;
+          }
+
+          .message-wrap {
+            width: calc(100% - 28px);
+          }
+
+          .message-email {
+            align-items: flex-start;
+          }
+
+          .message-content {
+            padding-right: 5px;
           }
         }
 
@@ -3240,6 +4318,15 @@ export default function Home() {
           .footer-bottom {
             flex-direction: column;
             gap: 8px;
+          }
+
+          .email-actions {
+            flex-direction: column;
+          }
+
+          .resend-button,
+          .continue-login-button {
+            width: 100%;
           }
         }
       `}</style>
