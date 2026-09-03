@@ -2,8 +2,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js';
 import { Search, ShieldAlert, Award, UserCheck, Loader2, Edit3, Check, X } from 'lucide-react';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface UserProfile {
   id: string;
@@ -16,18 +21,13 @@ interface UserProfile {
 }
 
 export default function AdminUsersPage() {
-  const supabase = createClientComponentClient();
-
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // State for editing points
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [newPoints, setNewPoints] = useState<number>(0);
   const [saving, setSaving] = useState(false);
 
-  // Fetch users from Supabase 'profiles' table
   const fetchUsers = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -47,7 +47,6 @@ export default function AdminUsersPage() {
     fetchUsers();
   }, []);
 
-  // Update User Points
   const handleUpdatePoints = async (userId: string) => {
     setSaving(true);
     const { error } = await supabase
@@ -66,7 +65,6 @@ export default function AdminUsersPage() {
     setSaving(false);
   };
 
-  // Filtered Users List based on Search Query
   const filteredUsers = users.filter(
     (user) =>
       user.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -76,7 +74,6 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header & Search */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-950/60 border border-slate-800 p-5 rounded-2xl">
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
@@ -87,7 +84,6 @@ export default function AdminUsersPage() {
           </p>
         </div>
 
-        {/* Search Bar */}
         <div className="relative w-full sm:w-72">
           <Search className="absolute right-3 top-2.5 w-4 h-4 text-slate-500" />
           <input
@@ -100,7 +96,6 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {/* Users Table */}
       <div className="bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex justify-center items-center p-12 text-slate-400">
@@ -125,13 +120,11 @@ export default function AdminUsersPage() {
               <tbody className="divide-y divide-slate-800/50">
                 {filteredUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-slate-900/40 transition-colors">
-                    {/* User Info */}
                     <td className="p-4">
                       <div className="font-medium text-white">{user.username || 'کاربر بدون نام'}</div>
                       <div className="text-xs text-slate-500">{user.email || user.id}</div>
                     </td>
 
-                    {/* Role */}
                     <td className="p-4">
                       <span
                         className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold ${
@@ -145,7 +138,6 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
 
-                    {/* Level */}
                     <td className="p-4 font-bold text-slate-300">
                       <span className="inline-flex items-center gap-1">
                         <Award size={14} className="text-amber-400" />
@@ -153,7 +145,6 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
 
-                    {/* NOVA Points (Editable Inline) */}
                     <td className="p-4">
                       {editingUserId === user.id ? (
                         <div className="flex items-center gap-2">
@@ -182,12 +173,10 @@ export default function AdminUsersPage() {
                       )}
                     </td>
 
-                    {/* Created At */}
                     <td className="p-4 text-xs text-slate-500">
                       {new Date(user.created_at).toLocaleDateString('fa-IR')}
                     </td>
 
-                    {/* Actions */}
                     <td className="p-4 text-center">
                       <button
                         onClick={() => {

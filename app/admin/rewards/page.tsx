@@ -2,8 +2,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Gift, Plus, Trash2, Check, Loader2 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+import { Gift, Plus, Trash2, Loader2 } from 'lucide-react';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface Reward {
   id: string;
@@ -16,8 +21,6 @@ interface Reward {
 }
 
 export default function AdminRewardsPage() {
-  const supabase = createClientComponentClient();
-
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -84,7 +87,6 @@ export default function AdminRewardsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Top Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-950/60 border border-slate-800 p-5 rounded-2xl">
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
@@ -103,7 +105,6 @@ export default function AdminRewardsPage() {
         </button>
       </div>
 
-      {/* Grid of Rewards */}
       {loading ? (
         <div className="flex justify-center items-center p-12 text-slate-400">
           <Loader2 className="w-6 h-6 animate-spin mr-2" />
@@ -142,7 +143,6 @@ export default function AdminRewardsPage() {
         </div>
       )}
 
-      {/* Modal - Create Reward */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-purple-500/30 rounded-2xl p-6 w-full max-w-md shadow-[0_0_30px_rgba(168,85,247,0.15)]">

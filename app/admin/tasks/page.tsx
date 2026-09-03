@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js';
 import { 
   Plus, 
   Trash2, 
@@ -16,6 +16,11 @@ import {
   Loader2 
 } from 'lucide-react';
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
 interface Task {
   id: string;
   title: string;
@@ -28,14 +33,11 @@ interface Task {
 }
 
 export default function AdminTasksPage() {
-  const supabase = createClientComponentClient();
-
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Form State
   const [formData, setFormData] = useState({
     title: '',
     platform: 'x' as 'x' | 'telegram' | 'discord' | 'other',
@@ -44,7 +46,6 @@ export default function AdminTasksPage() {
     reward_points: 50,
   });
 
-  // Fetch Tasks from Supabase
   const fetchTasks = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -64,7 +65,6 @@ export default function AdminTasksPage() {
     fetchTasks();
   }, []);
 
-  // Handle Form Input Change
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -73,7 +73,6 @@ export default function AdminTasksPage() {
     }));
   };
 
-  // Create New Task
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -96,12 +95,11 @@ export default function AdminTasksPage() {
         target_url: '',
         reward_points: 50,
       });
-      fetchTasks(); // Refresh List
+      fetchTasks();
     }
     setSubmitting(false);
   };
 
-  // Toggle Active Status
   const toggleStatus = async (id: string, currentStatus: boolean) => {
     const { error } = await supabase
       .from('tasks')
@@ -117,7 +115,6 @@ export default function AdminTasksPage() {
     }
   };
 
-  // Delete Task
   const deleteTask = async (id: string) => {
     if (!confirm('آیا از حذف این تسک اطمینان دارید؟')) return;
 
@@ -130,7 +127,6 @@ export default function AdminTasksPage() {
     }
   };
 
-  // Render Platform Badge Icon
   const getPlatformIcon = (platform: string) => {
     switch (platform) {
       case 'x':
@@ -144,7 +140,6 @@ export default function AdminTasksPage() {
 
   return (
     <div className="space-y-6">
-      {/* Top Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-950/60 border border-slate-800 p-5 rounded-2xl">
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
@@ -163,7 +158,6 @@ export default function AdminTasksPage() {
         </button>
       </div>
 
-      {/* Tasks Table / List */}
       <div className="bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex justify-center items-center p-12 text-slate-400">
@@ -246,7 +240,6 @@ export default function AdminTasksPage() {
         )}
       </div>
 
-      {/* Modal - Create Task */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-cyan-500/30 rounded-2xl p-6 w-full max-w-md shadow-[0_0_30px_rgba(6,182,212,0.15)] relative">

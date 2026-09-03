@@ -2,8 +2,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Trophy, Medal, Crown, Loader2, Sparkles, RefreshCw } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+import { Trophy, Medal, Crown, Loader2, RefreshCw } from 'lucide-react';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface LeaderboardUser {
   id: string;
@@ -14,8 +19,6 @@ interface LeaderboardUser {
 }
 
 export default function AdminLeaderboardPage() {
-  const supabase = createClientComponentClient();
-
   const [topUsers, setTopUsers] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,7 +44,6 @@ export default function AdminLeaderboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-950/60 border border-slate-800 p-5 rounded-2xl">
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
@@ -60,10 +62,8 @@ export default function AdminLeaderboardPage() {
         </button>
       </div>
 
-      {/* Top 3 Podium Card */}
       {!loading && topUsers.length >= 3 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Rank 2 */}
           <div className="bg-slate-950/80 border border-slate-800 p-5 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden order-2 md:order-1">
             <Medal className="w-8 h-8 text-slate-300 mb-2" />
             <span className="text-xs font-bold text-slate-400 bg-slate-900 px-3 py-1 rounded-full mb-2">رتبه ۲</span>
@@ -71,7 +71,6 @@ export default function AdminLeaderboardPage() {
             <p className="text-cyan-400 font-extrabold text-lg mt-1">{topUsers[1]?.nova_points || 0} PTS</p>
           </div>
 
-          {/* Rank 1 */}
           <div className="bg-slate-950 border border-amber-500/40 p-6 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden shadow-[0_0_25px_rgba(245,158,11,0.15)] order-1 md:order-2">
             <Crown className="w-10 h-10 text-amber-400 mb-2 animate-bounce" />
             <span className="text-xs font-bold text-amber-950 bg-amber-400 px-3 py-1 rounded-full mb-2">قهرمان NOVA</span>
@@ -79,7 +78,6 @@ export default function AdminLeaderboardPage() {
             <p className="text-amber-400 font-black text-2xl mt-1">{topUsers[0]?.nova_points || 0} PTS</p>
           </div>
 
-          {/* Rank 3 */}
           <div className="bg-slate-950/80 border border-slate-800 p-5 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden order-3">
             <Medal className="w-8 h-8 text-amber-700 mb-2" />
             <span className="text-xs font-bold text-slate-400 bg-slate-900 px-3 py-1 rounded-full mb-2">رتبه ۳</span>
@@ -89,7 +87,6 @@ export default function AdminLeaderboardPage() {
         </div>
       )}
 
-      {/* Leaderboard Table */}
       <div className="bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex justify-center items-center p-12 text-slate-400">
