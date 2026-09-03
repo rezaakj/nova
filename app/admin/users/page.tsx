@@ -1,4 +1,3 @@
-// app/admin/users/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,8 +5,8 @@ import { createClient } from '@supabase/supabase-js';
 import { Search, ShieldAlert, Award, UserCheck, Loader2, Edit3, Check, X } from 'lucide-react';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  'https://marfjuozuapydfdmcybv.supabase.co',
+  'sb_publishable_ZVfB67bxvtRdTtabTSfW_Q_HiNPfsSK'
 );
 
 interface UserProfile {
