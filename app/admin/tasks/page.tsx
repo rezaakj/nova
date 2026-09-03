@@ -8,7 +8,7 @@ import {
   CheckCircle, 
   XCircle, 
   ExternalLink, 
-  Twitter, 
+  TwitterIcon, 
   Send, 
   Globe, 
   Sparkles,
