@@ -2,17 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { 
-  Plus, 
-  Trash2, 
-  CheckCircle, 
-  XCircle, 
-  ExternalLink, 
-  TwitterIcon, 
-  Send, 
-  Globe, 
+import {
+  Plus,
+  Trash2,
+  CheckCircle,
+  XCircle,
+  ExternalLink,
+  TwitterIcon,
+  Send,
+  Globe,
   Sparkles,
-  Loader2 
+  Loader2,
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -40,13 +40,15 @@ export default function AdminTasksPage() {
   const [formData, setFormData] = useState({
     title: '',
     platform: 'x' as 'x' | 'telegram' | 'discord' | 'other',
-    task_type: 'follow' as 'follow' | 'retweet' | 'join_channel' | 'like' | 'visit',
+    task_type:
+      'follow' as 'follow' | 'retweet' | 'join_channel' | 'like' | 'visit',
     target_url: '',
     reward_points: 50,
   });
 
   const fetchTasks = async () => {
     setLoading(true);
+
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
@@ -57,6 +59,7 @@ export default function AdminTasksPage() {
     } else if (data) {
       setTasks(data as Task[]);
     }
+
     setLoading(false);
   };
 
@@ -64,8 +67,11 @@ export default function AdminTasksPage() {
     fetchTasks();
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
+
     setFormData((prev) => ({
       ...prev,
       [name]: name === 'reward_points' ? parseInt(value) || 0 : value,
@@ -87,6 +93,7 @@ export default function AdminTasksPage() {
       alert(`خطا در ذخیره تسک: ${error.message}`);
     } else {
       setIsModalOpen(false);
+
       setFormData({
         title: '',
         platform: 'x',
@@ -94,8 +101,10 @@ export default function AdminTasksPage() {
         target_url: '',
         reward_points: 50,
       });
+
       fetchTasks();
     }
+
     setSubmitting(false);
   };
 
@@ -109,7 +118,11 @@ export default function AdminTasksPage() {
       alert(`خطا در تغییر وضعیت: ${error.message}`);
     } else {
       setTasks((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, is_active: !currentStatus } : t))
+        prev.map((t) =>
+          t.id === id
+            ? { ...t, is_active: !currentStatus }
+            : t
+        )
       );
     }
   };
@@ -117,7 +130,10 @@ export default function AdminTasksPage() {
   const deleteTask = async (id: string) => {
     if (!confirm('آیا از حذف این تسک اطمینان دارید؟')) return;
 
-    const { error } = await supabase.from('tasks').delete().eq('id', id);
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', id);
 
     if (error) {
       alert(`خطا در حذف تسک: ${error.message}`);
@@ -129,9 +145,11 @@ export default function AdminTasksPage() {
   const getPlatformIcon = (platform: string) => {
     switch (platform) {
       case 'x':
-        return <Twitter className="w-4 h-4 text-sky-400" />;
+        return <TwitterIcon className="w-4 h-4 text-sky-400" />;
+
       case 'telegram':
         return <Send className="w-4 h-4 text-cyan-400" />;
+
       default:
         return <Globe className="w-4 h-4 text-slate-400" />;
     }
@@ -142,12 +160,15 @@ export default function AdminTasksPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-950/60 border border-slate-800 p-5 rounded-2xl">
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            مدیریت Social Tasks <Sparkles className="w-5 h-5 text-cyan-400" />
+            مدیریت Social Tasks
+            <Sparkles className="w-5 h-5 text-cyan-400" />
           </h1>
+
           <p className="text-slate-400 text-sm mt-1">
             تعریف کمپین‌های شبکه اجتماعی جدید برای پاداش‌دهی NOVA Points به کاربران
           </p>
         </div>
+
         <button
           onClick={() => setIsModalOpen(true)}
           className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all text-sm"
@@ -180,11 +201,16 @@ export default function AdminTasksPage() {
                   <th className="p-4 text-center">عملیات</th>
                 </tr>
               </thead>
+
               <tbody className="divide-y divide-slate-800/50">
                 {tasks.map((task) => (
-                  <tr key={task.id} className="hover:bg-slate-900/40 transition-colors">
+                  <tr
+                    key={task.id}
+                    className="hover:bg-slate-900/40 transition-colors"
+                  >
                     <td className="p-4 font-medium text-white flex items-center gap-2">
                       {task.title}
+
                       <a
                         href={task.target_url}
                         target="_blank"
@@ -194,17 +220,32 @@ export default function AdminTasksPage() {
                         <ExternalLink size={14} />
                       </a>
                     </td>
+
                     <td className="p-4">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 text-xs">
                         {getPlatformIcon(task.platform)}
-                        {task.platform === 'x' ? 'X (توییتر)' : task.platform === 'telegram' ? 'تلگرام' : 'سایر'}
+
+                        {task.platform === 'x'
+                          ? 'X (توییتر)'
+                          : task.platform === 'telegram'
+                          ? 'تلگرام'
+                          : 'سایر'}
                       </span>
                     </td>
-                    <td className="p-4 capitalize text-slate-400">{task.task_type}</td>
-                    <td className="p-4 font-bold text-cyan-400">+{task.reward_points} PTS</td>
+
+                    <td className="p-4 capitalize text-slate-400">
+                      {task.task_type}
+                    </td>
+
+                    <td className="p-4 font-bold text-cyan-400">
+                      +{task.reward_points} PTS
+                    </td>
+
                     <td className="p-4">
                       <button
-                        onClick={() => toggleStatus(task.id, task.is_active)}
+                        onClick={() =>
+                          toggleStatus(task.id, task.is_active)
+                        }
                         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
                           task.is_active
                             ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50'
@@ -213,15 +254,18 @@ export default function AdminTasksPage() {
                       >
                         {task.is_active ? (
                           <>
-                            <CheckCircle size={12} /> فعال
+                            <CheckCircle size={12} />
+                            فعال
                           </>
                         ) : (
                           <>
-                            <XCircle size={12} /> غیرفعال
+                            <XCircle size={12} />
+                            غیرفعال
                           </>
                         )}
                       </button>
                     </td>
+
                     <td className="p-4 text-center">
                       <button
                         onClick={() => deleteTask(task.id)}
@@ -242,11 +286,16 @@ export default function AdminTasksPage() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-cyan-500/30 rounded-2xl p-6 w-full max-w-md shadow-[0_0_30px_rgba(6,182,212,0.15)] relative">
-            <h2 className="text-lg font-bold text-white mb-4">ایجاد تسک جدید</h2>
+            <h2 className="text-lg font-bold text-white mb-4">
+              ایجاد تسک جدید
+            </h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">عنوان تسک</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  عنوان تسک
+                </label>
+
                 <input
                   type="text"
                   name="title"
@@ -260,7 +309,10 @@ export default function AdminTasksPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">پلتفرم</label>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                    پلتفرم
+                  </label>
+
                   <select
                     name="platform"
                     value={formData.platform}
@@ -275,7 +327,10 @@ export default function AdminTasksPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">نوع اکشن</label>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                    نوع اکشن
+                  </label>
+
                   <select
                     name="task_type"
                     value={formData.task_type}
@@ -292,7 +347,10 @@ export default function AdminTasksPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">لینک هدف (URL)</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  لینک هدف (URL)
+                </label>
+
                 <input
                   type="url"
                   name="target_url"
@@ -305,7 +363,10 @@ export default function AdminTasksPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">پاداش (NOVA Points)</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  پاداش (NOVA Points)
+                </label>
+
                 <input
                   type="number"
                   name="reward_points"
@@ -325,12 +386,16 @@ export default function AdminTasksPage() {
                 >
                   انصراف
                 </button>
+
                 <button
                   type="submit"
                   disabled={submitting}
                   className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs shadow-[0_0_10px_rgba(6,182,212,0.3)] transition-all disabled:opacity-50"
                 >
-                  {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {submitting && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+
                   ذخیره و انتشار
                 </button>
               </div>

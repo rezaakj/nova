@@ -1,1 +1,11 @@
-﻿/** @type {import('tailwindcss').Config} */`nmodule.exports = {`n  content: [`n    './app/**/*.{js,ts,jsx,tsx,mdx}',`n    './components/**/*.{js,ts,jsx,tsx,mdx}',`n    './pages/**/*.{js,ts,jsx,tsx,mdx}'`n  ],`n  theme: { extend: {} },`n  plugins: []`n};
+﻿/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+};
